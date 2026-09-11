@@ -4,12 +4,15 @@ import pandas as pd
 
 st.set_page_config(page_title="ScalpTick Screener", layout="centered")
 
-st.title("📈 ScalpTick Screener")
-st.caption("Kalkulator Prediksi & Rekomendasi Fraksi Tick Otomatis")
+st.title("🔥 Top Scalping Screener (IDX)")
+st.caption("Auto-Filter Saham Potensi Ruang Gerak Tick Lebar")
 
-# Input Saham
-ticker_input = st.text_input("Kode Saham (IDX):", value="JKON").upper().strip()
-ticker_symbol = f"{ticker_input}.JK"
+# Daftar Saham Watchlist (Bisa kamu tambah/kurangi sesuka hati)
+DEFAULT_TICKERS = [
+    "JKON", "BABP", "BRMS", "BUMI", "GOTO", 
+    "DEWA", "ENRG", "DOID", "MEDC", "KIJA",
+    "PANI", "INET", "STRK", "HUMI", "WIFI"
+]
 
 def get_tick_size(price):
     if price < 200:
@@ -23,60 +26,110 @@ def get_tick_size(price):
     else:
         return 25
 
-try:
-    stock = yf.Ticker(ticker_symbol)
-    df = stock.history(period="5d", interval="1d")
+# Sidebar untuk kustomisasi watchlist
+st.sidebar.header("Pengaturan Watchlist")
+user_tickers_input = st.sidebar.text_area(
+    "Daftar Saham (pisahkan koma):", 
+    value=", ".join(DEFAULT_TICKERS)
+)
+tickers_list = [t.strip().upper() for t in user_tickers_input.split(",") if t.strip()]
 
-    if len(df) >= 2:
-        prev_day = df.iloc[-2]
-        today = df.iloc[-1]
+# Tombol Refresh Data
+if st.button("🔄 Scan Pasar Sekarang"):
+    st.cache_data.clear()
 
-        last_price = int(today['Close'])
-        open_price = int(today['Open'])
-        high_price = int(today['High'])
-        low_price = int(today['Low'])
-        prev_low = int(prev_day['Low'])
-        volume = int(today['Volume'])
+@st.cache_data(ttl=300) # Simpan cache 5 menit agar tidak lemot
+def scan_stocks(tickers):
+    results = []
+    formatted_tickers = [f"{t}.JK" for t in tickers]
+    
+    # Download data sekaligus agar cepat
+    try:
+        data = yf.download(formatted_tickers, period="5d", interval="1d", group_by="ticker", threads=True)
+    except Exception:
+        return pd.DataFrame()
 
-        tick_size = get_tick_size(open_price)
+    for t in tickers:
+        sym = f"{t}.JK"
+        try:
+            df = data[sym].dropna() if len(tickers) > 1 else data.dropna()
+            if len(df) >= 2:
+                prev_day = df.iloc[-2]
+                today = df.iloc[-1]
 
-        # Perhitungan Rumus Laba Tick Excel
-        rentang_tick = ((high_price - open_price) + (open_price - prev_low)) / tick_size
-        prov_fee = rentang_tick - 0.5
+                last_p = int(today['Close'])
+                open_p = int(today['Open'])
+                high_p = int(today['High'])
+                low_p = int(today['Low'])
+                prev_low = int(prev_day['Low'])
+                vol = int(today['Volume'])
 
-        # Level Rekomendasi
-        entry_price = open_price
-        tp1_price = entry_price + (3 * tick_size)
-        tp2_price = entry_price + (5 * tick_size)
-        sl_price = entry_price - (2 * tick_size)
+                # Abaikan saham tidur / tidak ada transaksi
+                if vol <= 0 or open_p == 0:
+                    continue
 
-        loss_pct = ((sl_price - entry_price) / entry_price) * 100
-        gain_tp1_pct = ((tp1_price - entry_price) / entry_price) * 100
+                tick_size = get_tick_size(open_p)
 
-        st.subheader(f"Ringkasan: {ticker_input}")
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Harga Terkini", f"Rp {last_price}")
-        c2.metric("Open Hari Ini", f"Rp {open_price}")
-        c3.metric("Low Kemarin", f"Rp {prev_low}")
+                # Rumus Laba Tick Excel: ((High - Open) + (Open - Low_kemarin)) / Tick
+                rentang_tick = ((high_p - open_p) + (open_p - prev_low)) / tick_size
+                prov = rentang_tick - 0.5
+                lb2 = prov - 2.0
 
-        st.divider()
+                results.append({
+                    "Saham": t,
+                    "Harga": last_p,
+                    "Open": open_p,
+                    "Ruang Tick": round(rentang_tick, 1),
+                    "LB 2%": round(lb2, 1),
+                    "Volume (Lot)": vol // 100,
+                    "High": high_p,
+                    "Low": low_p,
+                    "Prev Low": prev_low,
+                    "Tick Size": tick_size
+                })
+        except Exception:
+            continue
 
-        if rentang_tick >= 4:
-            st.success(f"🔥 POTENSI TINGGI: Ruang gerak {rentang_tick:.1f} Tick")
-        else:
-            st.warning(f"⚠️ VOLATILITAS RENDAH: Ruang gerak {rentang_tick:.1f} Tick")
+    df_res = pd.DataFrame(results)
+    if not df_res.empty:
+        # Urutkan dari ruang gerak tick paling lebar
+        df_res = df_res.sort_values(by="Ruang Tick", ascending=False)
+    return df_res
 
-        st.subheader("🎯 Rekomendasi Eksekusi")
-        st.info(f"""
-        * **Area Entry Beli :** Rp {entry_price - tick_size} - Rp {entry_price}
-        * **Target Profit 1 (Net ~2%) :** Rp {tp1_price} (+{gain_tp1_pct:.2f}%)
-        * **Target Profit 2 (Net ~3%) :** Rp {tp2_price}
-        * **Batas Cut Loss :** Rp {sl_price} ({loss_pct:.2f}%)
-        """)
+with st.spinner("Sedang memindai saham-saham aktif..."):
+    df_screener = scan_stocks(tickers_list)
 
-        st.caption(f"Volume transaksi berjalan: {volume:,} lembar")
-    else:
-        st.error("Data saham tidak cukup untuk dianalisis.")
+if df_screener.empty:
+    st.warning("Belum ada data yang berhasil dimuat. Periksa koneksi atau daftar ticker.")
+else:
+    st.subheader("📋 Peringkat Potensi Harian")
+    st.write("Saham dengan ruang tick $\ge 4$ memiliki potensi cuan paling lebar:")
+    
+    # Tampilkan tabel ringkas di halaman depan
+    display_cols = ["Saham", "Harga", "Ruang Tick", "LB 2%", "Volume (Lot)"]
+    st.dataframe(df_screener[display_cols].reset_index(drop=True), use_container_width=True)
 
-except Exception as e:
-    st.error(f"Gagal mengambil data saham: {e}")
+    st.divider()
+
+    # Pilihan Saham untuk melihat detail eksekusi
+    selected_stock = st.selectbox("Pilih Saham untuk Detail Entry & SL:", df_screener["Saham"].tolist())
+    
+    row = df_screener[df_screener["Saham"] == selected_stock].iloc[0]
+    
+    entry_p = int(row["Open"])
+    tick = int(row["Tick Size"])
+    tp1 = entry_p + (3 * tick)
+    tp2 = entry_p + (5 * tick)
+    sl = entry_p - (2 * tick)
+    
+    loss_pct = ((sl - entry_p) / entry_p) * 100
+    gain_pct = ((tp1 - entry_p) / entry_p) * 100
+
+    st.subheader(f"🎯 Rekomendasi Eksekusi: {selected_stock}")
+    st.info(f"""
+    * **Zona Beli (Buy Area) :** Rp {entry_p - tick} - Rp {entry_p} *(Dekat Open / Low)*
+    * **Target Profit 1 (Net ~2%) :** Rp {tp1} (+{gain_pct:.2f}%)
+    * **Target Profit 2 (Net ~3%) :** Rp {tp2}
+    * **Batas Cut Loss Disiplin :** Rp {sl} ({loss_pct:.2f}%)
+    * **Nilai 1 Fraksi (Tick) :** Rp {tick}
+    """)
