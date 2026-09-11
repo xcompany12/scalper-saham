@@ -3,12 +3,12 @@ import yfinance as yf
 import pandas as pd
 
 st.set_page_config(
-    page_title="ScalpTick Live Hub", 
+    page_title="ScalpTick Live Radar", 
     layout="centered",
     initial_sidebar_state="collapsed"
 )
 
-# Custom Styling Elegan & Responsif Mobile
+# Custom Styling Elegan & Bersih di HP
 st.markdown("""
 <style>
     .block-container { padding-top: 1rem; padding-bottom: 2rem; }
@@ -21,39 +21,44 @@ st.markdown("""
         box-shadow: 0 1px 3px rgba(0,0,0,0.05);
     }
     .badge-prio {
-        background-color: #dcfce7;
-        color: #166534;
-        padding: 4px 10px;
-        border-radius: 20px;
-        font-weight: 700;
-        font-size: 0.8rem;
+        background-color: #dcfce7; color: #166534;
+        padding: 4px 10px; border-radius: 20px; font-weight: 700; font-size: 0.8rem;
     }
     .badge-mid {
-        background-color: #fef9c3;
-        color: #854d0e;
-        padding: 4px 10px;
-        border-radius: 20px;
-        font-weight: 700;
-        font-size: 0.8rem;
+        background-color: #fef9c3; color: #854d0e;
+        padding: 4px 10px; border-radius: 20px; font-weight: 700; font-size: 0.8rem;
     }
     .badge-low {
-        background-color: #fee2e2;
-        color: #991b1b;
-        padding: 4px 10px;
-        border-radius: 20px;
-        font-weight: 700;
-        font-size: 0.8rem;
+        background-color: #fee2e2; color: #991b1b;
+        padding: 4px 10px; border-radius: 20px; font-weight: 700; font-size: 0.8rem;
     }
 </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ ScalpTick Live Hub")
-st.caption("Auto-Screener & Kalkulator Eksekusi Dinamis (IDX)")
+st.title("⚡ ScalpTick Live Radar")
+st.caption("Pusat Radar Saham Volatil & Kalkulator Eksekusi 2–3 Tick (IDX)")
 
-DEFAULT_TICKERS = [
-    "JKON", "BABP", "BRMS", "BUMI", "GOTO", 
-    "DEWA", "ENRG", "DOID", "MEDC", "KIJA",
-    "PANI", "INET", "STRK", "HUMI", "WIFI"
+# 3 Sektor Paling Efektif
+FOCUSED_SECTORS = {
+    "🔥 Scalping Teraktif & Momentum": [
+        "JKON", "BABP", "BRMS", "BUMI", "GOTO", 
+        "DEWA", "ENRG", "DOID", "MEDC", "KIJA"
+    ],
+    "⛏️ Komoditas & Energi (Likuid)": [
+        "ADRO", "PTBA", "ANTM", "INCO", "BRMS", 
+        "ELSA", "TINS", "HRUM", "BULL", "MEDC"
+    ],
+    "🏢 Properti, Infra & Digital": [
+        "WIFI", "INET", "STRK", "HUMI", "WIKA", 
+        "PTPP", "BSDE", "PWON", "KIJA", "JKON"
+    ]
+}
+
+# Daftar 20 Saham Cadangan Otomatis (Tanpa Perlu Hafal Kode)
+EXTRA_TICKERS = [
+    "AYAM", "STRK", "HUMI", "IRRA", "KAEF", "GIAA", "PPRE", 
+    "WEHA", "MPMX", "ASRI", "LPKR", "DILD", "TOBA", "RAJA", 
+    "BULL", "ELSA", "WTON", "TOTL", "SMDR", "PUDP"
 ]
 
 def get_tick_size(price):
@@ -68,16 +73,17 @@ def get_tick_size(price):
     else:
         return 25
 
-with st.sidebar:
-    st.header("⚙️ Pengaturan")
-    user_tickers = st.text_area("Watchlist:", value=", ".join(DEFAULT_TICKERS))
-    tickers_list = [t.strip().upper() for t in user_tickers.split(",") if t.strip()]
-
-if st.button("🔄 Refresh Data Real-Time", use_container_width=True):
-    st.cache_data.clear()
+def highlight_soft(row):
+    val = row["Potensi (%)"]
+    if val >= 3.0:
+        return ['background-color: #f0fdf4; color: #14532d; font-weight: 500;'] * len(row)
+    elif val >= 1.5:
+        return ['background-color: #fefce8; color: #713f12; font-weight: 500;'] * len(row)
+    else:
+        return ['background-color: #fafafa; color: #a1a1aa;'] * len(row)
 
 @st.cache_data(ttl=300)
-def fetch_screen_data(tickers):
+def fetch_focused_data(tickers):
     results = []
     formatted = [f"{t}.JK" for t in tickers]
     try:
@@ -104,6 +110,7 @@ def fetch_screen_data(tickers):
                     continue
 
                 tick = get_tick_size(open_p)
+                # Rumus Excel: Laba Tick & Potensi Rentang
                 rentang_tick = ((high_p - open_p) + (open_p - prev_low)) / tick
                 potensi_pct = (rentang_tick * tick / open_p) * 100
 
@@ -113,7 +120,6 @@ def fetch_screen_data(tickers):
                 target_tp2 = open_p + (5 * tick)
                 cut_loss = open_p - (2 * tick)
 
-                # Persentase Gain / Loss
                 gain_pct = ((target_tp1 - open_p) / open_p) * 100
                 loss_pct = ((cut_loss - open_p) / open_p) * 100
 
@@ -152,70 +158,115 @@ def fetch_screen_data(tickers):
         res_df = res_df.sort_values(by="Potensi (%)", ascending=False).reset_index(drop=True)
     return res_df
 
-with st.spinner("Memindai dinamika pasar..."):
-    df_data = fetch_screen_data(tickers_list)
+tab1, tab2 = st.tabs(["📊 Radar 3 Sektor Utama", "⚡ Saham Cadangan Lapis 2 & 3"])
 
-if df_data.empty:
-    st.warning("Data belum tersedia. Silakan periksa daftar ticker.")
-else:
-    st.write("### 📌 Pilih Saham untuk Detail Eksekusi")
-    
-    # Selector Pilihan Saham
-    stock_options = [f"{r['Saham']} ({r['Badge']})" for _, r in df_data.iterrows()]
-    selected_option = st.selectbox(
-        "Sentuh untuk mengganti saham:", 
-        options=stock_options,
-        index=0
-    )
-    
-    selected_code = selected_option.split(" ")[0]
-    stock = df_data[df_data["Saham"] == selected_code].iloc[0]
+# ==================== TAB 1: RADAR 3 SEKTOR ====================
+with tab1:
+    c_sec, c_rf = st.columns([3, 1])
+    with c_sec:
+        selected_sector = st.selectbox("Pilih Sektor Fokus:", list(FOCUSED_SECTORS.keys()))
+    with c_rf:
+        st.write("")
+        st.write("")
+        if st.button("🔄 Scan", key="btn_sec", use_container_width=True):
+            st.cache_data.clear()
 
-    # Kartu Ringkas Utama
-    st.markdown(f"""
-    <div class="card-box">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-            <h2 style="margin:0; color:#0f172a;">{stock['Saham']} <span style="font-size:1.1rem; color:#64748b;">Rp {stock['Harga']}</span></h2>
-            <span class="{stock['ColorTag']}">{stock['Badge']}</span>
+    tickers_to_scan = FOCUSED_SECTORS[selected_sector]
+
+    with st.spinner("Memindai saham sektor terpilih..."):
+        df_data = fetch_focused_data(tickers_to_scan)
+
+    if df_data.empty:
+        st.warning("Data transaksi belum masuk atau pasar sedang libur.")
+    else:
+        st.write("### 📌 Detail Kartu Eksekusi")
+        stock_options = [f"{r['Saham']} ({r['Badge']})" for _, r in df_data.iterrows()]
+        selected_option = st.selectbox("Sentuh untuk ganti saham:", options=stock_options, index=0)
+        selected_code = selected_option.split(" ")[0]
+        stock = df_data[df_data["Saham"] == selected_code].iloc[0]
+
+        st.markdown(f"""
+        <div class="card-box">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h2 style="margin:0; color:#0f172a;">{stock['Saham']} <span style="font-size:1.1rem; color:#64748b;">Rp {stock['Harga']}</span></h2>
+                <span class="{stock['ColorTag']}">{stock['Badge']}</span>
+            </div>
+            <p style="margin:6px 0 0 0; color:#475569; font-size:0.9rem;">
+                Potensi Ruang: <b>+{stock['Potensi (%)']}%</b> ({stock['Ruang (Tick)']} Tick) | Vol: <b>{stock['Volume']:,} Lot</b>
+            </p>
         </div>
-        <p style="margin:6px 0 0 0; color:#475569; font-size:0.9rem;">
-            Potensi Ruang Gerak: <b>+{stock['Potensi (%)']}%</b> ({stock['Ruang (Tick)']} Tick) | Vol: <b>{stock['Volume']:,} Lot</b>
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
-    # 3 Metrik Inti (Sudah diperbaiki key-nya)
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Zona Beli", f"Rp {stock['Zona Beli']}")
-    c2.metric("Target TP (+3T)", f"Rp {stock['Target TP']}", delta=f"+{stock['Gain %']}%")
-    c3.metric("Cut Loss (-2T)", f"Rp {stock['Cut Loss']}", delta=f"{stock['Loss %']}%", delta_color="inverse")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Zona Beli", f"Rp {stock['Zona Beli']}")
+        c2.metric("Target TP (+3T)", f"Rp {stock['Target TP']}", delta=f"+{stock['Gain %']}%")
+        c3.metric("Cut Loss (-2T)", f"Rp {stock['Cut Loss']}", delta=f"{stock['Loss %']}%", delta_color="inverse")
+        st.caption(f"🎯 **TP 2 (+5 Tick):** Rp {stock['TP 2']} | **Fraksi:** Rp {stock['Tick Size']}/tick")
 
-    st.caption(f"🎯 **TP 2 (Agresif / +5 Tick):** Rp {stock['TP 2']} | **Fraksi Tick:** Rp {stock['Tick Size']}")
+        st.divider()
 
-    st.divider()
+        st.write("### 📋 Tabel Perbandingan Sektor")
+        display_cols = ["Saham", "Badge", "Harga", "Zona Beli", "Target TP", "Cut Loss", "Potensi (%)"]
+        tabel_ringkas = df_data[display_cols]
 
-    # Tabel Ringkas Semua Saham
-    st.write("### 📋 Ringkasan Semua Saham")
-    
-    display_cols = ["Saham", "Badge", "Harga", "Zona Beli", "Target TP", "Cut Loss", "Potensi (%)"]
-    tabel_ringkas = df_data[display_cols]
+        styled_table = tabel_ringkas.style.apply(highlight_soft, axis=1)\
+                                          .format({
+                                              "Harga": "Rp {:,.0f}", 
+                                              "Target TP": "Rp {:,.0f}", 
+                                              "Cut Loss": "Rp {:,.0f}", 
+                                              "Potensi (%)": "+{:.1f}%"
+                                          })
+        st.dataframe(styled_table, use_container_width=True, hide_index=True)
 
-    def highlight_soft(row):
-        val = row["Potensi (%)"]
-        if val >= 3.0:
-            return ['background-color: #f0fdf4; color: #14532d; font-weight: 500;'] * len(row)
-        elif val >= 1.5:
-            return ['background-color: #fefce8; color: #713f12; font-weight: 500;'] * len(row)
-        else:
-            return ['background-color: #fafafa; color: #a1a1aa;'] * len(row)
+# ==================== TAB 2: SAHAM CADANGAN LAPIS 2 & 3 ====================
+with tab2:
+    st.write("### ⚡ Saham Alternatif Volatil")
+    st.caption("Pilihan saham lapis 2 & 3 otomatis tanpa perlu ketik kode")
 
-    styled_table = tabel_ringkas.style.apply(highlight_soft, axis=1)\
-                                      .format({
-                                          "Harga": "Rp {:,.0f}", 
-                                          "Target TP": "Rp {:,.0f}", 
-                                          "Cut Loss": "Rp {:,.0f}", 
-                                          "Potensi (%)": "+{:.1f}%"
-                                      })
+    if st.button("🔄 Scan Saham Cadangan", key="btn_extra", use_container_width=True):
+        st.cache_data.clear()
 
-    st.dataframe(styled_table, use_container_width=True, hide_index=True)
-    st.caption("💡 *Tabel otomatis diurutkan dari potensi gerak paling lebar ke paling sempit.*")
+    with st.spinner("Memindai 20 saham alternatif..."):
+        df_extra = fetch_focused_data(EXTRA_TICKERS)
+
+    if df_extra.empty:
+        st.warning("Data transaksi belum tersedia.")
+    else:
+        st.write("### 📌 Detail Kartu Saham Cadangan")
+        extra_options = [f"{r['Saham']} ({r['Badge']})" for _, r in df_extra.iterrows()]
+        selected_extra = st.selectbox("Pilih Saham:", options=extra_options, index=0)
+        extra_code = selected_extra.split(" ")[0]
+        ex_stock = df_extra[df_extra["Saham"] == extra_code].iloc[0]
+
+        st.markdown(f"""
+        <div class="card-box">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h2 style="margin:0; color:#0f172a;">{ex_stock['Saham']} <span style="font-size:1.1rem; color:#64748b;">Rp {ex_stock['Harga']}</span></h2>
+                <span class="{ex_stock['ColorTag']}">{ex_stock['Badge']}</span>
+            </div>
+            <p style="margin:6px 0 0 0; color:#475569; font-size:0.9rem;">
+                Potensi Ruang: <b>+{ex_stock['Potensi (%)']}%</b> ({ex_stock['Ruang (Tick)']} Tick) | Vol: <b>{ex_stock['Volume']:,} Lot</b>
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        ec1, ec2, ec3 = st.columns(3)
+        ec1.metric("Zona Beli", f"Rp {ex_stock['Zona Beli']}")
+        ec2.metric("Target TP (+3T)", f"Rp {ex_stock['Target TP']}", delta=f"+{ex_stock['Gain %']}%")
+        ec3.metric("Cut Loss (-2T)", f"Rp {ex_stock['Cut Loss']}", delta=f"{ex_stock['Loss %']}%", delta_color="inverse")
+        st.caption(f"🎯 **TP 2 (+5 Tick):** Rp {ex_stock['TP 2']} | **Fraksi:** Rp {ex_stock['Tick Size']}/tick")
+
+        st.divider()
+
+        st.write("### 📋 Tabel Ranking Saham Cadangan")
+        display_extra_cols = ["Saham", "Badge", "Harga", "Zona Beli", "Target TP", "Cut Loss", "Potensi (%)"]
+        tabel_extra = df_extra[display_extra_cols]
+
+        styled_extra_table = tabel_extra.style.apply(highlight_soft, axis=1)\
+                                              .format({
+                                                  "Harga": "Rp {:,.0f}", 
+                                                  "Target TP": "Rp {:,.0f}", 
+                                                  "Cut Loss": "Rp {:,.0f}", 
+                                                  "Potensi (%)": "+{:.1f}%"
+                                              })
+        st.dataframe(styled_extra_table, use_container_width=True, hide_index=True)
