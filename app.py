@@ -1,6 +1,8 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
+from datetime import datetime
+import pytz
 
 st.set_page_config(
     page_title="ScalpTick Live Radar", 
@@ -8,7 +10,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Custom Styling Elegan & Bersih di HP
+# Custom Styling
 st.markdown("""
 <style>
     .block-container { padding-top: 1rem; padding-bottom: 2rem; }
@@ -32,13 +34,41 @@ st.markdown("""
         background-color: #fee2e2; color: #991b1b;
         padding: 4px 10px; border-radius: 20px; font-weight: 700; font-size: 0.8rem;
     }
+    .time-banner {
+        background-color: #f1f5f9;
+        border-left: 4px solid #3b82f6;
+        padding: 8px 12px;
+        border-radius: 6px;
+        font-size: 0.85rem;
+        color: #334155;
+        margin-bottom: 15px;
+    }
 </style>
 """, unsafe_allow_html=True)
+
+# Status Waktu Jakarta
+jkt_tz = pytz.timezone("Asia/Jakarta")
+now_jkt = datetime.now(jkt_tz)
+current_time_str = now_jkt.strftime("%d/%m/%Y | %H:%M:%S WIB")
+
+# Cek apakah jam bursa sedang buka (Senin-Jumat 09:00 - 16:00 WIB)
+is_weekday = now_jkt.weekday() < 5
+hour_val = now_jkt.hour + now_jkt.minute / 60.0
+market_open = is_weekday and (9.0 <= hour_val <= 16.0)
+
+market_status_badge = "🟢 BURSA BUKA" if market_open else "🔴 BURSA TUTUP"
 
 st.title("⚡ ScalpTick Live Radar")
 st.caption("Pusat Radar Saham Volatil & Kalkulator Eksekusi 2–3 Tick (IDX)")
 
-# 3 Sektor Paling Efektif
+# Info Banner Jam & Status Bursa
+st.markdown(f"""
+<div class="time-banner">
+    🕒 <b>Waktu Pindai:</b> {current_time_str} &nbsp;|&nbsp; <b>Status:</b> {market_status_badge}
+</div>
+""", unsafe_allow_html=True)
+
+# 3 Sektor Pilihan Inti
 FOCUSED_SECTORS = {
     "🔥 Scalping Teraktif & Momentum": [
         "JKON", "BABP", "BRMS", "BUMI", "GOTO", 
@@ -54,7 +84,6 @@ FOCUSED_SECTORS = {
     ]
 }
 
-# Daftar 20 Saham Cadangan Otomatis (Tanpa Perlu Hafal Kode)
 EXTRA_TICKERS = [
     "AYAM", "STRK", "HUMI", "IRRA", "KAEF", "GIAA", "PPRE", 
     "WEHA", "MPMX", "ASRI", "LPKR", "DILD", "TOBA", "RAJA", 
@@ -82,7 +111,7 @@ def highlight_soft(row):
     else:
         return ['background-color: #fafafa; color: #a1a1aa;'] * len(row)
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=180)
 def fetch_focused_data(tickers):
     results = []
     formatted = [f"{t}.JK" for t in tickers]
@@ -99,6 +128,9 @@ def fetch_focused_data(tickers):
                 prev_day = df.iloc[-2]
                 today = df.iloc[-1]
 
+                # Tanggal sesi candle terakhir
+                data_date = today.name.strftime('%d/%m/%Y')
+
                 last_p = int(today['Close'])
                 open_p = int(today['Open'])
                 high_p = int(today['High'])
@@ -110,7 +142,6 @@ def fetch_focused_data(tickers):
                     continue
 
                 tick = get_tick_size(open_p)
-                # Rumus Excel: Laba Tick & Potensi Rentang
                 rentang_tick = ((high_p - open_p) + (open_p - prev_low)) / tick
                 potensi_pct = (rentang_tick * tick / open_p) * 100
 
@@ -135,8 +166,9 @@ def fetch_focused_data(tickers):
 
                 results.append({
                     "Saham": t,
-                    "Harga": last_p,
+                    "Tanggal Data": data_date,
                     "Open": open_p,
+                    "Close/Last": last_p,
                     "Badge": badge,
                     "ColorTag": color_tag,
                     "Potensi (%)": round(potensi_pct, 1),
@@ -173,7 +205,7 @@ with tab1:
 
     tickers_to_scan = FOCUSED_SECTORS[selected_sector]
 
-    with st.spinner("Memindai saham sektor terpilih..."):
+    with st.spinner("Memindai sektor..."):
         df_data = fetch_focused_data(tickers_to_scan)
 
     if df_data.empty:
@@ -188,15 +220,21 @@ with tab1:
         st.markdown(f"""
         <div class="card-box">
             <div style="display: flex; justify-content: space-between; align-items: center;">
-                <h2 style="margin:0; color:#0f172a;">{stock['Saham']} <span style="font-size:1.1rem; color:#64748b;">Rp {stock['Harga']}</span></h2>
+                <h2 style="margin:0; color:#0f172a;">{stock['Saham']}</h2>
                 <span class="{stock['ColorTag']}">{stock['Badge']}</span>
             </div>
-            <p style="margin:6px 0 0 0; color:#475569; font-size:0.9rem;">
-                Potensi Ruang: <b>+{stock['Potensi (%)']}%</b> ({stock['Ruang (Tick)']} Tick) | Vol: <b>{stock['Volume']:,} Lot</b>
+            <p style="margin:6px 0 0 0; color:#475569; font-size:0.88rem;">
+                Tanggal Data: <b>{stock['Tanggal Data']}</b> | Ruang: <b>+{stock['Potensi (%)']}%</b> ({stock['Ruang (Tick)']} Tick) | Vol: <b>{stock['Volume']:,} Lot</b>
             </p>
         </div>
         """, unsafe_allow_html=True)
 
+        # Metrik Harga Open vs Close
+        oc1, oc2 = st.columns(2)
+        oc1.metric("Harga Open", f"Rp {stock['Open']}")
+        oc2.metric("Harga Close / Last", f"Rp {stock['Close/Last']}")
+
+        # Metrik Rencana Eksekusi
         c1, c2, c3 = st.columns(3)
         c1.metric("Zona Beli", f"Rp {stock['Zona Beli']}")
         c2.metric("Target TP (+3T)", f"Rp {stock['Target TP']}", delta=f"+{stock['Gain %']}%")
@@ -205,28 +243,29 @@ with tab1:
 
         st.divider()
 
-        st.write("### 📋 Tabel Perbandingan Sektor")
-        display_cols = ["Saham", "Badge", "Harga", "Zona Beli", "Target TP", "Cut Loss", "Potensi (%)"]
+        st.write("### 📋 Tabel Perbandingan (Open vs Close)")
+        display_cols = ["Saham", "Open", "Close/Last", "Zona Beli", "Target TP", "Cut Loss", "Potensi (%)"]
         tabel_ringkas = df_data[display_cols]
 
         styled_table = tabel_ringkas.style.apply(highlight_soft, axis=1)\
                                           .format({
-                                              "Harga": "Rp {:,.0f}", 
+                                              "Open": "Rp {:,.0f}",
+                                              "Close/Last": "Rp {:,.0f}", 
                                               "Target TP": "Rp {:,.0f}", 
                                               "Cut Loss": "Rp {:,.0f}", 
                                               "Potensi (%)": "+{:.1f}%"
                                           })
         st.dataframe(styled_table, use_container_width=True, hide_index=True)
 
-# ==================== TAB 2: SAHAM CADANGAN LAPIS 2 & 3 ====================
+# ==================== TAB 2: SAHAM CADANGAN ====================
 with tab2:
     st.write("### ⚡ Saham Alternatif Volatil")
-    st.caption("Pilihan saham lapis 2 & 3 otomatis tanpa perlu ketik kode")
+    st.caption("Pilihan saham cadangan otomatis tanpa perlu ketik kode")
 
     if st.button("🔄 Scan Saham Cadangan", key="btn_extra", use_container_width=True):
         st.cache_data.clear()
 
-    with st.spinner("Memindai 20 saham alternatif..."):
+    with st.spinner("Memindai 20 saham cadangan..."):
         df_extra = fetch_focused_data(EXTRA_TICKERS)
 
     if df_extra.empty:
@@ -241,14 +280,18 @@ with tab2:
         st.markdown(f"""
         <div class="card-box">
             <div style="display: flex; justify-content: space-between; align-items: center;">
-                <h2 style="margin:0; color:#0f172a;">{ex_stock['Saham']} <span style="font-size:1.1rem; color:#64748b;">Rp {ex_stock['Harga']}</span></h2>
+                <h2 style="margin:0; color:#0f172a;">{ex_stock['Saham']}</h2>
                 <span class="{ex_stock['ColorTag']}">{ex_stock['Badge']}</span>
             </div>
-            <p style="margin:6px 0 0 0; color:#475569; font-size:0.9rem;">
-                Potensi Ruang: <b>+{ex_stock['Potensi (%)']}%</b> ({ex_stock['Ruang (Tick)']} Tick) | Vol: <b>{ex_stock['Volume']:,} Lot</b>
+            <p style="margin:6px 0 0 0; color:#475569; font-size:0.88rem;">
+                Tanggal Data: <b>{ex_stock['Tanggal Data']}</b> | Ruang: <b>+{ex_stock['Potensi (%)']}%</b> ({ex_stock['Ruang (Tick)']} Tick) | Vol: <b>{ex_stock['Volume']:,} Lot</b>
             </p>
         </div>
         """, unsafe_allow_html=True)
+
+        eoc1, eoc2 = st.columns(2)
+        eoc1.metric("Harga Open", f"Rp {ex_stock['Open']}")
+        eoc2.metric("Harga Close / Last", f"Rp {ex_stock['Close/Last']}")
 
         ec1, ec2, ec3 = st.columns(3)
         ec1.metric("Zona Beli", f"Rp {ex_stock['Zona Beli']}")
@@ -258,13 +301,14 @@ with tab2:
 
         st.divider()
 
-        st.write("### 📋 Tabel Ranking Saham Cadangan")
-        display_extra_cols = ["Saham", "Badge", "Harga", "Zona Beli", "Target TP", "Cut Loss", "Potensi (%)"]
+        st.write("### 📋 Tabel Perbandingan Saham Cadangan")
+        display_extra_cols = ["Saham", "Open", "Close/Last", "Zona Beli", "Target TP", "Cut Loss", "Potensi (%)"]
         tabel_extra = df_extra[display_extra_cols]
 
         styled_extra_table = tabel_extra.style.apply(highlight_soft, axis=1)\
                                               .format({
-                                                  "Harga": "Rp {:,.0f}", 
+                                                  "Open": "Rp {:,.0f}",
+                                                  "Close/Last": "Rp {:,.0f}", 
                                                   "Target TP": "Rp {:,.0f}", 
                                                   "Cut Loss": "Rp {:,.0f}", 
                                                   "Potensi (%)": "+{:.1f}%"
