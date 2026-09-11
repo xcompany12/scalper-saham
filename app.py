@@ -3,21 +3,22 @@ import yfinance as yf
 import pandas as pd
 
 st.set_page_config(
-    page_title="ScalpTick Dynamic Hub", 
+    page_title="ScalpTick Live Hub", 
     layout="centered",
     initial_sidebar_state="collapsed"
 )
 
-# Styling modern agar responsive di layar HP
+# Custom Styling Elegan & Responsif Mobile
 st.markdown("""
 <style>
     .block-container { padding-top: 1rem; padding-bottom: 2rem; }
     .card-box {
-        background-color: #f8fafc;
+        background-color: #ffffff;
         border: 1px solid #e2e8f0;
         border-radius: 12px;
         padding: 16px;
-        margin-bottom: 15px;
+        margin-bottom: 12px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
     }
     .badge-prio {
         background-color: #dcfce7;
@@ -43,7 +44,6 @@ st.markdown("""
         font-weight: 700;
         font-size: 0.8rem;
     }
-    div[data-testid="stMetricValue"] { font-size: 1.3rem !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -73,10 +73,8 @@ with st.sidebar:
     user_tickers = st.text_area("Watchlist:", value=", ".join(DEFAULT_TICKERS))
     tickers_list = [t.strip().upper() for t in user_tickers.split(",") if t.strip()]
 
-c_btn, _ = st.columns([2, 1])
-with c_btn:
-    if st.button("🔄 Refresh Data Real-Time", use_container_width=True):
-        st.cache_data.clear()
+if st.button("🔄 Refresh Data Real-Time", use_container_width=True):
+    st.cache_data.clear()
 
 @st.cache_data(ttl=300)
 def fetch_screen_data(tickers):
@@ -138,9 +136,9 @@ def fetch_screen_data(tickers):
                     "Potensi (%)": round(potensi_pct, 1),
                     "Ruang (Tick)": round(rentang_tick, 1),
                     "Zona Beli": zona_beli,
-                    "TP 1 (+3T)": target_tp1,
-                    "TP 2 (+5T)": target_tp2,
-                    "Cut Loss (-2T)": cut_loss,
+                    "Target TP": target_tp1,
+                    "TP 2": target_tp2,
+                    "Cut Loss": cut_loss,
                     "Gain %": round(gain_pct, 2),
                     "Loss %": round(loss_pct, 2),
                     "Volume": vol // 100,
@@ -160,9 +158,9 @@ with st.spinner("Memindai dinamika pasar..."):
 if df_data.empty:
     st.warning("Data belum tersedia. Silakan periksa daftar ticker.")
 else:
-    st.write("### 📌 Pilih Saham untuk Lihat Kartu Eksekusi")
+    st.write("### 📌 Pilih Saham untuk Detail Eksekusi")
     
-    # 1. SELECTOR DINAMIS INTERAKTIF
+    # Selector Pilihan Saham
     stock_options = [f"{r['Saham']} ({r['Badge']})" for _, r in df_data.iterrows()]
     selected_option = st.selectbox(
         "Sentuh untuk mengganti saham:", 
@@ -170,40 +168,36 @@ else:
         index=0
     )
     
-    # Ambil data saham terpilih
     selected_code = selected_option.split(" ")[0]
     stock = df_data[df_data["Saham"] == selected_code].iloc[0]
 
-    # 2. KARTU DETAIL INTERAKTIF
+    # Kartu Ringkas Utama
     st.markdown(f"""
     <div class="card-box">
         <div style="display: flex; justify-content: space-between; align-items: center;">
-            <h2 style="margin:0; color:#0f172a;">{stock['Saham']} <span style="font-size:1rem; color:#64748b;">Rp {stock['Harga']}</span></h2>
+            <h2 style="margin:0; color:#0f172a;">{stock['Saham']} <span style="font-size:1.1rem; color:#64748b;">Rp {stock['Harga']}</span></h2>
             <span class="{stock['ColorTag']}">{stock['Badge']}</span>
         </div>
-        <p style="margin:4px 0 0 0; color:#475569; font-size:0.9rem;">
+        <p style="margin:6px 0 0 0; color:#475569; font-size:0.9rem;">
             Potensi Ruang Gerak: <b>+{stock['Potensi (%)']}%</b> ({stock['Ruang (Tick)']} Tick) | Vol: <b>{stock['Volume']:,} Lot</b>
         </p>
     </div>
     """, unsafe_allow_html=True)
 
-    # 3 Metrik Inti
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Zona Beli (Open)", f"Rp {stock['Zona Beli']}")
-    col2.metric("Target TP (+3T)", f"Rp {stock['TP 1 (+3T)']}", delta=f"+{stock['Gain %']}%")
-    col3.metric("Cut Loss (-2T)", f"Rp {stock['Cut Loss']}", delta=f"{stock['Loss %']}%", delta_color="inverse")
+    # 3 Metrik Inti (Sudah diperbaiki key-nya)
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Zona Beli", f"Rp {stock['Zona Beli']}")
+    c2.metric("Target TP (+3T)", f"Rp {stock['Target TP']}", delta=f"+{stock['Gain %']}%")
+    c3.metric("Cut Loss (-2T)", f"Rp {stock['Cut Loss']}", delta=f"{stock['Loss %']}%", delta_color="inverse")
 
-    st.markdown(f"""
-    * **Target Agresif (TP 2 / +5 Tick):** Rp {stock['TP 2 (+5T)']}
-    * **Fraksi Harga:** Rp {stock['Tick Size']} per tick
-    """)
+    st.caption(f"🎯 **TP 2 (Agresif / +5 Tick):** Rp {stock['TP 2']} | **Fraksi Tick:** Rp {stock['Tick Size']}")
 
     st.divider()
 
-    # 3. TABEL LENGKAP SEMUA SAHAM DENGAN TOMBOL PREVIEW
+    # Tabel Ringkas Semua Saham
     st.write("### 📋 Ringkasan Semua Saham")
     
-    display_cols = ["Saham", "Badge", "Harga", "Zona Beli", "TP 1 (+3T)", "Cut Loss (-2T)", "Potensi (%)"]
+    display_cols = ["Saham", "Badge", "Harga", "Zona Beli", "Target TP", "Cut Loss", "Potensi (%)"]
     tabel_ringkas = df_data[display_cols]
 
     def highlight_soft(row):
@@ -218,11 +212,10 @@ else:
     styled_table = tabel_ringkas.style.apply(highlight_soft, axis=1)\
                                       .format({
                                           "Harga": "Rp {:,.0f}", 
-                                          "TP 1 (+3T)": "Rp {:,.0f}", 
-                                          "Cut Loss (-2T)": "Rp {:,.0f}", 
+                                          "Target TP": "Rp {:,.0f}", 
+                                          "Cut Loss": "Rp {:,.0f}", 
                                           "Potensi (%)": "+{:.1f}%"
                                       })
 
     st.dataframe(styled_table, use_container_width=True, hide_index=True)
-    
-    st.caption("💡 *Tabel di atas langsung menampilkan Zona Beli, TP, dan SL untuk seluruh saham tanpa terpotong.*")
+    st.caption("💡 *Tabel otomatis diurutkan dari potensi gerak paling lebar ke paling sempit.*")
