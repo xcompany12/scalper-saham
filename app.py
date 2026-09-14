@@ -39,16 +39,6 @@ st.markdown("""
         color: #334155;
         margin-bottom: 15px;
     }
-    .stock-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        background: #ffffff;
-        border: 1px solid #e2e8f0;
-        border-radius: 8px;
-        padding: 10px 14px;
-        margin-bottom: 8px;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -73,8 +63,8 @@ market_status_badge = "🟢 BURSA BUKA" if market_open else "🔴 BURSA TUTUP"
 st.title("⚡ ScalpTick Fast Action")
 st.caption("Fokus Saham Teraktif & Eksekusi Split (+2T / +4T / -3T)")
 
-# Top Bar
-c_banner, c_toggle = st.columns([2, 1])
+# Top Bar dengan Sakelar Auto-Sync & Pemilih Interval
+c_banner, c_toggle = st.columns([1.8, 1.2])
 with c_banner:
     st.markdown(f"""
     <div class="time-banner">
@@ -82,7 +72,17 @@ with c_banner:
     </div>
     """, unsafe_allow_html=True)
 with c_toggle:
-    auto_refresh = st.toggle("⚡ Auto-Sync (30s)", value=True)
+    c_tog, c_sec = st.columns([1.1, 0.9])
+    with c_tog:
+        auto_refresh = st.toggle("⚡ Sync", value=True)
+    with c_sec:
+        refresh_interval = st.selectbox(
+            "Jeda:", 
+            [15, 10, 30, 60], 
+            index=0, 
+            format_func=lambda x: f"{x}s",
+            label_visibility="collapsed"
+        )
 
 # Input Saham Dadakan
 with st.expander("➕ Tambah Saham Dadakan (Running Trade)", expanded=False):
@@ -128,7 +128,7 @@ def get_tick_size(price):
     else:
         return 25
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=10)
 def fetch_scalp_data(tickers):
     results = []
     formatted = [f"{t}.JK" for t in tickers]
@@ -219,13 +219,12 @@ def fetch_scalp_data(tickers):
         res_df = res_df.sort_values(by="Potensi (%)", ascending=False).reset_index(drop=True)
     return res_df
 
-with st.spinner("Menyaring data pasar..."):
+with st.spinner("Memindai data pasar..."):
     df_raw = fetch_scalp_data(ACTIVE_RADAR_POOL)
 
 if df_raw.empty:
     st.warning("Belum ada data transaksi aktif di pasar.")
 else:
-    # Ambil data teratas lalu filter saham yang dibuang user
     custom_in_df = df_raw[df_raw["Saham"].isin(st.session_state.custom_stocks)]
     base_top = df_raw[~df_raw["Saham"].isin(st.session_state.custom_stocks)].head(6)
     df_all = pd.concat([custom_in_df, base_top]).drop_duplicates(subset=["Saham"]).reset_index(drop=True)
@@ -247,7 +246,7 @@ else:
 
     select_labels = [f"{r['Saham']} ({r['Badge']}) | Vol: {r['Volume (Lot)']:,} Lot | Potensi: +{r['Potensi (%)']}%" for _, r in df_focus.iterrows()]
     selected_label = st.selectbox(
-        "🎯 Pilih Saham Fokus Eksekusi Pagi:", 
+        "🎯 Pilih Saham Fokus Eksekusi:", 
         options=select_labels, 
         index=default_idx, 
         key="focus_selector",
@@ -305,10 +304,9 @@ else:
 
     st.markdown("---")
 
-    # ==================== TABEL DENGAN ACTION BUTTON ====================
+    # TABEL ACTION BUTTON
     st.write(f"### 📋 Daftar Saham Paling Layak Pantau ({len(df_focus)} Emiten)")
 
-    # Header Tabel
     h1, h2, h3, h4, h5, h6 = st.columns([1.5, 1.2, 1.2, 1.2, 1.5, 1])
     h1.caption("**Saham**")
     h2.caption("**Open**")
@@ -336,6 +334,7 @@ else:
             st.session_state.hidden_stocks.clear()
             st.rerun()
 
+# Timer interval dinamis
 if auto_refresh:
-    time.sleep(30)
+    time.sleep(refresh_interval)
     st.rerun()
