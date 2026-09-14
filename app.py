@@ -10,7 +10,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Custom Styling Responsif & Modern
+# Custom Styling
 st.markdown("""
 <style>
     .block-container { 
@@ -76,7 +76,6 @@ DEFAULT_SECTORS = {
     ]
 }
 
-# Simpan daftar kustom ke Session State
 if "sector_stocks" not in st.session_state:
     st.session_state.sector_stocks = {k: list(v) for k, v in DEFAULT_SECTORS.items()}
 
@@ -169,7 +168,7 @@ def fetch_focused_data(tickers):
         res_df = res_df.sort_values(by="Potensi (%)", ascending=False).reset_index(drop=True)
     return res_df
 
-# Kontrol Sektor & Refresh
+# Sektor & Refresh
 c_sec, c_rf = st.columns([3, 1])
 with c_sec:
     selected_sector = st.selectbox("Pilih Sektor:", list(st.session_state.sector_stocks.keys()))
@@ -184,7 +183,7 @@ current_tickers = st.session_state.sector_stocks[selected_sector]
 with st.spinner("Memindai emiten..."):
     df_data = fetch_focused_data(current_tickers)
 
-# ==================== COCKPIT EKSEKUSI ====================
+# Panel Eksekusi
 if df_data.empty:
     st.warning("Belum ada data saham yang aktif pada daftar ini.")
 else:
@@ -195,56 +194,14 @@ else:
     selected_code = selected_option.split(" ")[0]
     stock = df_data[df_data["Saham"] == selected_code].iloc[0]
 
-    # Kartu Cockpit Compact Berwarna Kontras
-    st.markdown(f"""
-    <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 16px; margin: 10px 0 16px 0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
-        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f1f5f9; padding-bottom: 10px; margin-bottom: 12px;">
-            <div>
-                <span style="font-size: 1.6rem; font-weight: 800; color: #0f172a; letter-spacing: -0.5px;">{stock['Saham']}</span>
-                <span style="font-size: 0.85rem; color: #64748b; margin-left: 8px;">Open: <b>Rp {stock['Open']}</b> | Last: <b>Rp {stock['Last']}</b></span>
-            </div>
-            <div>
-                <span class="{stock['ColorTag']}">{stock['Badge']}</span>
-            </div>
-        </div>
-
-        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px;">
-            <!-- Box Beli -->
-            <div style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 10px; padding: 10px 8px; text-align: center;">
-                <div style="font-size: 0.72rem; font-weight: 700; color: #0369a1; text-transform: uppercase;">🛒 Zona Beli</div>
-                <div style="font-size: 1.15rem; font-weight: 800; color: #0c4a6e; margin-top: 2px;">Rp {stock['Zona Beli']}</div>
-                <div style="font-size: 0.68rem; color: #0284c7;">Antre Bid</div>
-            </div>
-
-            <!-- Box TP -->
-            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 10px 8px; text-align: center;">
-                <div style="font-size: 0.72rem; font-weight: 700; color: #15803d; text-transform: uppercase;">🎯 Target TP (+3T)</div>
-                <div style="font-size: 1.15rem; font-weight: 800; color: #14532d; margin-top: 2px;">Rp {stock['Target TP']}</div>
-                <div style="font-size: 0.72rem; font-weight: 700; color: #16a34a;">+{stock['Gain %']}%</div>
-            </div>
-
-            <!-- Box Cut Loss -->
-            <div style="background: #fff1f2; border: 1px solid #fecdd3; border-radius: 10px; padding: 10px 8px; text-align: center;">
-                <div style="font-size: 0.72rem; font-weight: 700; color: #be123c; text-transform: uppercase;">🛡️ Cut Loss (-2T)</div>
-                <div style="font-size: 1.15rem; font-weight: 800; color: #881337; margin-top: 2px;">Rp {stock['Cut Loss']}</div>
-                <div style="font-size: 0.72rem; font-weight: 700; color: #e11d48;">{stock['Loss %']}%</div>
-            </div>
-        </div>
-
-        <div style="background: #f8fafc; border-radius: 8px; padding: 8px 12px; display: flex; justify-content: space-between; font-size: 0.75rem; color: #475569;">
-            <span>🚀 <b>TP 2 (+5T):</b> Rp {stock['TP 2']}</span>
-            <span>📏 <b>Fraksi:</b> Rp {stock['Tick Size']}/t</span>
-            <span>📊 <b>Volume:</b> {stock['Volume']:,} Lot</span>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    cockpit_html = f"""<div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 16px; margin: 10px 0 16px 0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);"><div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f1f5f9; padding-bottom: 10px; margin-bottom: 12px;"><div><span style="font-size: 1.6rem; font-weight: 800; color: #0f172a; letter-spacing: -0.5px;">{stock['Saham']}</span><span style="font-size: 0.85rem; color: #64748b; margin-left: 8px;">Open: <b>Rp {stock['Open']}</b> | Last: <b>Rp {stock['Last']}</b></span></div><div><span class="{stock['ColorTag']}">{stock['Badge']}</span></div></div><div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px;"><div style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 10px; padding: 10px 8px; text-align: center;"><div style="font-size: 0.72rem; font-weight: 700; color: #0369a1; text-transform: uppercase;">🛒 Zona Beli</div><div style="font-size: 1.15rem; font-weight: 800; color: #0c4a6e; margin-top: 2px;">Rp {stock['Zona Beli']}</div><div style="font-size: 0.68rem; color: #0284c7;">Antre Bid</div></div><div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 10px 8px; text-align: center;"><div style="font-size: 0.72rem; font-weight: 700; color: #15803d; text-transform: uppercase;">🎯 Target TP (+3T)</div><div style="font-size: 1.15rem; font-weight: 800; color: #14532d; margin-top: 2px;">Rp {stock['Target TP']}</div><div style="font-size: 0.72rem; font-weight: 700; color: #16a34a;">+{stock['Gain %']}%</div></div><div style="background: #fff1f2; border: 1px solid #fecdd3; border-radius: 10px; padding: 10px 8px; text-align: center;"><div style="font-size: 0.72rem; font-weight: 700; color: #be123c; text-transform: uppercase;">🛡️ Cut Loss (-2T)</div><div style="font-size: 1.15rem; font-weight: 800; color: #881337; margin-top: 2px;">Rp {stock['Cut Loss']}</div><div style="font-size: 0.72rem; font-weight: 700; color: #e11d48;">{stock['Loss %']}%</div></div></div><div style="background: #f8fafc; border-radius: 8px; padding: 8px 12px; display: flex; justify-content: space-between; font-size: 0.75rem; color: #475569;"><span>🚀 <b>TP 2 (+5T):</b> Rp {stock['TP 2']}</span><span>📏 <b>Fraksi:</b> Rp {stock['Tick Size']}/t</span><span>📊 <b>Volume:</b> {stock['Volume']:,} Lot</span></div></div>"""
+    st.markdown(cockpit_html, unsafe_allow_html=True)
 
 st.divider()
 
 # ==================== KELOLA & DAFTAR SEKTOR ====================
 st.write("### 📋 Daftar Ringkas Sektor")
 
-# Panel Tambah / Hapus Emiten
 with st.expander("⚙️ Kelola Saham di Sektor Ini", expanded=False):
     col_add1, col_add2 = st.columns([3, 1])
     with col_add1:
@@ -274,7 +231,6 @@ with st.expander("⚙️ Kelola Saham di Sektor Ini", expanded=False):
         st.cache_data.clear()
         st.rerun()
 
-# Menampilkan Kartu Ringkas Saham
 if not df_data.empty:
     for _, row in df_data.iterrows():
         st.markdown(f"""
