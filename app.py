@@ -46,13 +46,11 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Inisialisasi memori sesi agar saham fokus & input tidak hilang
+# Inisialisasi memori sesi
 if "custom_stocks" not in st.session_state:
     st.session_state.custom_stocks = []
 if "locked_ticker" not in st.session_state:
     st.session_state.locked_ticker = None
-if "last_refresh_time" not in st.session_state:
-    st.session_state.last_refresh_time = time.time()
 
 # Waktu Jakarta & Status Bursa
 jkt_tz = pytz.timezone("Asia/Jakarta")
@@ -67,7 +65,6 @@ market_status_badge = "🟢 BURSA BUKA" if market_open else "🔴 BURSA TUTUP"
 st.title("⚡ ScalpTick Pro Radar")
 st.caption("Live Radar & Kalkulator Eksekusi Anti-Reset (IDX)")
 
-# Pool Saham Inti Likuid
 BASE_RADAR_POOL = [
     "BUMI", "BRMS", "DEWA", "ENRG", "DOID", "MEDC", "ELSA", "RAJA", "TOBA", "BULL",
     "GOTO", "WIFI", "INET", "STRK", "HUMI", "AYAM", "KIJA", "JKON", "WIKA", "PTPP",
@@ -97,7 +94,7 @@ def highlight_soft(row):
     else:
         return ['background-color: #fafafa; color: #a1a1aa;'] * len(row)
 
-# ==================== KONTROL AUTO-REFRESH ====================
+# Header Bar Waktu & Auto-Sync
 c_banner, c_toggle = st.columns([2, 1])
 with c_banner:
     st.markdown(f"""
@@ -106,9 +103,9 @@ with c_banner:
     </div>
     """, unsafe_allow_html=True)
 with c_toggle:
-    auto_refresh = st.toggle("⚡ Auto-Sync (30s)", value=True, help="Update harga live otomatis tanpa ubah pilihan saham")
+    auto_refresh = st.toggle("⚡ Auto-Sync (30s)", value=True, help="Update harga otomatis setiap 30 detik")
 
-# ==================== INPUT SAHAM DADAKAN ====================
+# Input Saham Dadakan
 with st.expander("➕ Tambah Saham Dadakan (Running Trade)", expanded=False):
     col_in, col_add, col_rst = st.columns([3, 1, 1])
     with col_in:
@@ -132,7 +129,6 @@ with st.expander("➕ Tambah Saham Dadakan (Running Trade)", expanded=False):
 
 ACTIVE_RADAR_POOL = list(dict.fromkeys(st.session_state.custom_stocks + BASE_RADAR_POOL))
 
-# Tombol Manual Refresh & Sortir
 col_btn, col_sort = st.columns([1, 2])
 with col_btn:
     if st.button("🔄 Scan Manual", use_container_width=True):
@@ -212,13 +208,6 @@ def fetch_top_active_data(tickers):
             tick = get_tick_size(open_p)
             rentang_tick = ((high_p - open_p) + (open_p - prev_low)) / tick
             potensi_pct = (rentang_tick * tick / open_p) * 100
-
-            zona_beli = f"{open_p - tick} - {open_p}"
-            target_tp = open_p + (3 * tick)
-            cut_loss = open_p - (3 * tick)
-
-            gain_pct = ((target_tp - open_p) / open_p) * 100
-            loss_pct = ((cut_loss - open_p) / open_p) * 100
             change_day_pct = ((last_p - prev_close) / prev_close) * 100
 
             if potensi_pct >= 3.0 and rentang_tick >= 4.0:
@@ -239,13 +228,8 @@ def fetch_top_active_data(tickers):
                 "Open": open_p,
                 "Saat Ini": last_p,
                 "Change %": round(change_day_pct, 2),
-                "Entry": zona_beli,
-                "TP (+3T)": target_tp,
-                "Cut Loss (-3T)": cut_loss,
                 "Potensi (%)": round(potensi_pct, 1),
                 "Ruang (Tick)": round(rentang_tick, 1),
-                "Gain %": round(gain_pct, 2),
-                "Loss %": round(loss_pct, 2),
                 "Volume (Lot)": vol // 100,
                 "Tick Size": tick
             })
@@ -269,7 +253,6 @@ else:
     st.write("### 📌 Saham Pilihan Terpilih")
     stock_codes = df_data["Saham"].tolist()
 
-    # Kunci index pilihan saham agar tidak terpental saat data refresh
     default_idx = 0
     if st.session_state.locked_ticker in stock_codes:
         default_idx = stock_codes.index(st.session_state.locked_ticker)
@@ -290,7 +273,6 @@ else:
     st.session_state.locked_ticker = current_selected_code
     stock = df_data[df_data["Saham"] == current_selected_code].iloc[0]
 
-    # Kartu Data Saham Terkunci
     st.markdown(f"""
     <div class="card-box">
         <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -307,9 +289,9 @@ else:
     f1.metric("Harga Open", f"Rp {stock['Open']:,}")
     f2.metric("Harga Saat Ini", f"Rp {stock['Saat Ini']:,}", delta=f"{stock['Change %']}%")
 
-    # Kalkulator Eksekusi Real-Time
+    # ==================== KALKULATOR EKSEKUSI ====================
     st.markdown("#### 🧮 Live Execution Calculator")
-    st.caption("Hitung target otomatis (fokus saham tetap terkunci):")
+    st.caption("Hitung target otomatis untuk order sekuritas:")
 
     default_entry = int(stock['Saat Ini']) if stock['Saat Ini'] > 0 else int(stock['Open'])
     
@@ -350,23 +332,20 @@ else:
 
     st.divider()
 
-    # Tabel Ringkasan
+    # ==================== TABEL RINGKAS (CLEAN VIEW) ====================
     st.write(f"### 📋 Ringkasan Saham Paling Ramai ({len(df_data)} Emiten)")
-    display_cols = ["Saham", "Status", "Open", "Saat Ini", "Entry", "TP (+3T)", "Cut Loss (-3T)", "Potensi (%)", "Volume (Lot)"]
+    display_cols = ["Saham", "Status", "Open", "Saat Ini", "Potensi (%)", "Volume (Lot)"]
     tabel_ringkas = df_data[display_cols]
 
     styled_table = tabel_ringkas.style.apply(highlight_soft, axis=1)\
                                       .format({
                                           "Open": "Rp {:,.0f}",
                                           "Saat Ini": "Rp {:,.0f}", 
-                                          "TP (+3T)": "Rp {:,.0f}", 
-                                          "Cut Loss (-3T)": "Rp {:,.0f}", 
                                           "Potensi (%)": "+{:.1f}%",
                                           "Volume (Lot)": "{:,.0f}"
                                       })
     st.dataframe(styled_table, use_container_width=True, hide_index=True)
 
-# Loop Otomatis 30 Detik Tanpa Mengganggu Interaksi User
 if auto_refresh:
     time.sleep(30)
     st.rerun()
