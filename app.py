@@ -51,17 +51,14 @@ jkt_tz = pytz.timezone("Asia/Jakarta")
 now_jkt = datetime.now(jkt_tz)
 current_time_str = now_jkt.strftime("%d/%m/%Y | %H:%M:%S WIB")
 
-# Cek apakah jam bursa sedang buka (Senin-Jumat 09:00 - 16:00 WIB)
 is_weekday = now_jkt.weekday() < 5
 hour_val = now_jkt.hour + now_jkt.minute / 60.0
 market_open = is_weekday and (9.0 <= hour_val <= 16.0)
-
 market_status_badge = "🟢 BURSA BUKA" if market_open else "🔴 BURSA TUTUP"
 
 st.title("⚡ ScalpTick Live Radar")
 st.caption("Pusat Radar Saham Volatil & Kalkulator Eksekusi 2–3 Tick (IDX)")
 
-# Info Banner Jam & Status Bursa
 st.markdown(f"""
 <div class="time-banner">
     🕒 <b>Waktu Pindai:</b> {current_time_str} &nbsp;|&nbsp; <b>Status:</b> {market_status_badge}
@@ -111,77 +108,108 @@ def highlight_soft(row):
     else:
         return ['background-color: #fafafa; color: #a1a1aa;'] * len(row)
 
-@st.cache_data(ttl=180)
+@st.cache_data(ttl=60)
 def fetch_focused_data(tickers):
     results = []
     formatted = [f"{t}.JK" for t in tickers]
+    
     try:
-        data = yf.download(formatted, period="5d", interval="1d", group_by="ticker", threads=True)
+        daily_data = yf.download(formatted, period="5d", interval="1d", group_by="ticker", threads=True)
     except Exception:
         return pd.DataFrame()
+
+    today_str = datetime.now(pytz.timezone("Asia/Jakarta")).strftime('%Y-%m-%d')
 
     for t in tickers:
         sym = f"{t}.JK"
         try:
-            df = data[sym].dropna() if len(tickers) > 1 else data.dropna()
-            if len(df) >= 2:
-                prev_day = df.iloc[-2]
-                today = df.iloc[-1]
+            df_daily = daily_data[sym].dropna() if len(tickers) > 1 else daily_data.dropna()
+            if len(df_daily) < 1:
+                continue
 
-                # Tanggal sesi candle terakhir
-                data_date = today.name.strftime('%d/%m/%Y')
+            last_candle_date = df_daily.index[-1].strftime('%Y-%m-%d')
 
-                last_p = int(today['Close'])
+            if last_candle_date == today_str and len(df_daily) >= 2:
+                prev_day = df_daily.iloc[-2]
+                today = df_daily.iloc[-1]
                 open_p = int(today['Open'])
                 high_p = int(today['High'])
                 low_p = int(today['Low'])
+                last_p = int(today['Close'])
                 prev_low = int(prev_day['Low'])
                 vol = int(today['Volume'])
-
-                if vol <= 0 or open_p == 0:
-                    continue
-
-                tick = get_tick_size(open_p)
-                rentang_tick = ((high_p - open_p) + (open_p - prev_low)) / tick
-                potensi_pct = (rentang_tick * tick / open_p) * 100
-
-                # Parameter Eksekusi
-                zona_beli = f"{open_p - tick} - {open_p}"
-                target_tp1 = open_p + (3 * tick)
-                target_tp2 = open_p + (5 * tick)
-                cut_loss = open_p - (2 * tick)
-
-                gain_pct = ((target_tp1 - open_p) / open_p) * 100
-                loss_pct = ((cut_loss - open_p) / open_p) * 100
-
-                if potensi_pct >= 3.0 and rentang_tick >= 4.0:
-                    badge = "🟢 Prioritas"
-                    color_tag = "badge-prio"
-                elif potensi_pct >= 1.5:
-                    badge = "🟡 Pantau"
-                    color_tag = "badge-mid"
+                data_date = today.name.strftime('%d/%m/%Y (Live)')
+            else:
+                prev_day = df_daily.iloc[-1]
+                prev_low = int(prev_day['Low'])
+                
+                t_obj = yf.Ticker(sym)
+                df_intra = t_obj.history(period="1d", interval="1m")
+                
+                if not df_intra.empty:
+                    open_p = int(df_intra.iloc[0]['Open'])
+                    high_p = int(df_intra['High'].max())
+                    low_p = int(df_intra['Low'].min())
+                    last_p = int(df_intra.iloc[-1]['Close'])
+                    vol = int(df_intra['Volume'].sum())
+                    data_date = df_intra.index[-1].strftime('%d/%m/%Y (Live)')
                 else:
-                    badge = "🔴 Rendah"
-                    color_tag = "badge-low"
+                    if len(df_daily) >= 2:
+                        prev_day = df_daily.iloc[-2]
+                        today = df_daily.iloc[-1]
+                        open_p = int(today['Open'])
+                        high_p = int(today['High'])
+                        low_p = int(today['Low'])
+                        last_p = int(today['Close'])
+                        prev_low = int(prev_day['Low'])
+                        vol = int(today['Volume'])
+                        data_date = today.name.strftime('%d/%m/%Y')
+                    else:
+                        continue
 
-                results.append({
-                    "Saham": t,
-                    "Tanggal Data": data_date,
-                    "Open": open_p,
-                    "Close/Last": last_p,
-                    "Badge": badge,
-                    "ColorTag": color_tag,
-                    "Potensi (%)": round(potensi_pct, 1),
-                    "Ruang (Tick)": round(rentang_tick, 1),
-                    "Zona Beli": zona_beli,
-                    "Target TP": target_tp1,
-                    "TP 2": target_tp2,
-                    "Cut Loss": cut_loss,
-                    "Gain %": round(gain_pct, 2),
-                    "Loss %": round(loss_pct, 2),
-                    "Volume": vol // 100,
-                    "Tick Size": tick
-                })
+            if vol <= 0 or open_p == 0:
+                continue
+
+            tick = get_tick_size(open_p)
+            rentang_tick = ((high_p - open_p) + (open_p - prev_low)) / tick
+            potensi_pct = (rentang_tick * tick / open_p) * 100
+
+            zona_beli = f"{open_p - tick} - {open_p}"
+            target_tp1 = open_p + (3 * tick)
+            target_tp2 = open_p + (5 * tick)
+            cut_loss = open_p - (2 * tick)
+
+            gain_pct = ((target_tp1 - open_p) / open_p) * 100
+            loss_pct = ((cut_loss - open_p) / open_p) * 100
+
+            if potensi_pct >= 3.0 and rentang_tick >= 4.0:
+                badge = "🟢 Prioritas"
+                color_tag = "badge-prio"
+            elif potensi_pct >= 1.5:
+                badge = "🟡 Pantau"
+                color_tag = "badge-mid"
+            else:
+                badge = "🔴 Rendah"
+                color_tag = "badge-low"
+
+            results.append({
+                "Saham": t,
+                "Tanggal Data": data_date,
+                "Open": open_p,
+                "Close/Last": last_p,
+                "Badge": badge,
+                "ColorTag": color_tag,
+                "Potensi (%)": round(potensi_pct, 1),
+                "Ruang (Tick)": round(rentang_tick, 1),
+                "Zona Beli": zona_beli,
+                "Target TP": target_tp1,
+                "TP 2": target_tp2,
+                "Cut Loss": cut_loss,
+                "Gain %": round(gain_pct, 2),
+                "Loss %": round(loss_pct, 2),
+                "Volume": vol // 100,
+                "Tick Size": tick
+            })
         except Exception:
             continue
 
@@ -229,12 +257,10 @@ with tab1:
         </div>
         """, unsafe_allow_html=True)
 
-        # Metrik Harga Open vs Close
         oc1, oc2 = st.columns(2)
         oc1.metric("Harga Open", f"Rp {stock['Open']}")
         oc2.metric("Harga Close / Last", f"Rp {stock['Close/Last']}")
 
-        # Metrik Rencana Eksekusi
         c1, c2, c3 = st.columns(3)
         c1.metric("Zona Beli", f"Rp {stock['Zona Beli']}")
         c2.metric("Target TP (+3T)", f"Rp {stock['Target TP']}", delta=f"+{stock['Gain %']}%")
