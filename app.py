@@ -3,6 +3,7 @@ import yfinance as yf
 import pandas as pd
 from datetime import datetime
 import pytz
+import time
 
 st.set_page_config(
     page_title="ScalpTick Fast Action", 
@@ -38,7 +39,7 @@ st.markdown("""
         border-radius: 8px;
         font-size: 0.82rem;
         color: #334155;
-        margin-bottom: 16px;
+        margin-bottom: 12px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -59,6 +60,18 @@ st.markdown(f"""
     🕒 {current_time_str} &nbsp;|&nbsp; <b>{market_status_badge}</b>
 </div>
 """, unsafe_allow_html=True)
+
+# Kontrol Auto-Sync (15 Detik)
+col_sync1, col_sync2 = st.columns([1, 1])
+with col_sync1:
+    auto_sync = st.toggle("⚡ Sync Otomatis", value=True)
+with col_sync2:
+    sync_interval = st.selectbox(
+        "Interval Refresh:", 
+        options=[10, 15, 30, 60], 
+        index=1, 
+        format_func=lambda x: f"{x}s"
+    )
 
 # Sektor Bawaan (Default Watchlist)
 DEFAULT_SECTORS = {
@@ -91,7 +104,8 @@ def get_tick_size(price):
     else:
         return 25
 
-@st.cache_data(ttl=180)
+# Cache diatur 15 detik agar sinkron dengan interval auto-refresh
+@st.cache_data(ttl=15)
 def fetch_focused_data(tickers):
     if not tickers:
         return pd.DataFrame()
@@ -168,7 +182,7 @@ def fetch_focused_data(tickers):
         res_df = res_df.sort_values(by="Potensi (%)", ascending=False).reset_index(drop=True)
     return res_df
 
-# Sektor & Refresh
+# Sektor & Refresh Manual
 c_sec, c_rf = st.columns([3, 1])
 with c_sec:
     selected_sector = st.selectbox("Pilih Sektor:", list(st.session_state.sector_stocks.keys()))
@@ -183,7 +197,7 @@ current_tickers = st.session_state.sector_stocks[selected_sector]
 with st.spinner("Memindai emiten..."):
     df_data = fetch_focused_data(current_tickers)
 
-# Panel Eksekusi
+# Panel Eksekusi Kilat
 if df_data.empty:
     st.warning("Belum ada data saham yang aktif pada daftar ini.")
 else:
@@ -246,3 +260,13 @@ if not df_data.empty:
             </div>
         </div>
         """, unsafe_allow_html=True)
+
+# Loop Refresh Otomatis
+if auto_sync:
+    try:
+        from streamlit_autorefresh import st_autorefresh
+        st_autorefresh(interval=sync_interval * 1000, key="scalptick_auto_refresh")
+    except ImportError:
+        time.sleep(sync_interval)
+        st.cache_data.clear()
+        st.rerun()
