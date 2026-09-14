@@ -11,7 +11,6 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Custom Styling Elegan & Mobile/iPad Friendly
 st.markdown("""
 <style>
     .block-container { padding-top: 1rem; padding-bottom: 2rem; }
@@ -54,6 +53,8 @@ st.markdown("""
 # State Management
 if "custom_stocks" not in st.session_state:
     st.session_state.custom_stocks = []
+if "hidden_stocks" not in st.session_state:
+    st.session_state.hidden_stocks = []
 if "locked_ticker" not in st.session_state:
     st.session_state.locked_ticker = None
 
@@ -68,7 +69,7 @@ market_open = is_weekday and (9.0 <= hour_val <= 16.0)
 market_status_badge = "🟢 BURSA BUKA" if market_open else "🔴 BURSA TUTUP"
 
 st.title("⚡ ScalpTick Fast Action")
-st.caption("Fokus Top 3 Saham Teraktif & Eksekusi Split Exit (+2T / +4T / -3T)")
+st.caption("Fokus Top Saham Teraktif & Eksekusi Split (+2T / +4T / -3T)")
 
 # Top Bar
 c_banner, c_toggle = st.columns([2, 1])
@@ -98,8 +99,9 @@ with st.expander("➕ Tambah Saham Dadakan (Running Trade)", expanded=False):
     with col_rst:
         st.write("")
         st.write("")
-        if st.button("Reset", use_container_width=True):
+        if st.button("Reset All", use_container_width=True):
             st.session_state.custom_stocks = []
+            st.session_state.hidden_stocks = []
             st.cache_data.clear()
             st.rerun()
 
@@ -211,29 +213,23 @@ def fetch_scalp_data(tickers):
 
     res_df = pd.DataFrame(results)
     if not res_df.empty:
-        # Urutkan berdasarkan potensi rentang tertinggi
         res_df = res_df.sort_values(by="Potensi (%)", ascending=False).reset_index(drop=True)
     return res_df
 
-with st.spinner("Menyaring 3 saham teraktif..."):
+with st.spinner("Menyaring data pasar..."):
     df_raw = fetch_scalp_data(ACTIVE_RADAR_POOL)
 
 if df_raw.empty:
     st.warning("Belum ada data transaksi aktif di pasar.")
 else:
-    # Prioritaskan saham dadakan (jika ada) + ambil TOP 3
+    # Filter buang saham yang di-blacklist user
     custom_in_df = df_raw[df_raw["Saham"].isin(st.session_state.custom_stocks)]
-    base_top = df_raw[~df_raw["Saham"].isin(st.session_state.custom_stocks)].head(3)
+    base_top = df_raw[~df_raw["Saham"].isin(st.session_state.custom_stocks)].head(5)
     df_focus = pd.concat([custom_in_df, base_top]).drop_duplicates(subset=["Saham"]).reset_index(drop=True)
 
-    st.markdown("""
-    <div class="step-box">
-        <b>💡 SOP 3 Langkah Sederhana:</b><br>
-        1. Pilih 1 saham di bawah → Cek Order Book (Wajib Bid tebal).<br>
-        2. Antre jemput di zona entry (Open s/d +1 Tick).<br>
-        3. Begitu matched, langsung pasang antrean jual TP 1 (+2T) & TP 2 (+4T).
-    </div>
-    """, unsafe_allow_html=True)
+    # Filter out hidden stocks
+    if st.session_state.hidden_stocks:
+        df_focus = df_focus[~df_focus["Saham"].isin(st.session_state.hidden_stocks)].reset_index(drop=True)
 
     # Selector Fokus Terkunci
     stock_codes = df_focus["Saham"].tolist()
@@ -257,7 +253,7 @@ else:
     st.session_state.locked_ticker = current_code
     active_stock = df_focus[df_focus["Saham"] == current_code].iloc[0]
 
-    # HERO CARD: Ringkasan Saham Terpilih
+    # HERO CARD
     st.markdown(f"""
     <div class="hero-card">
         <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -270,7 +266,7 @@ else:
     </div>
     """, unsafe_allow_html=True)
 
-    # KALKULATOR EKSEKUSI SPLIT PLAN
+    # KALKULATOR EKSEKUSI
     st.markdown("### 🧮 Eksekusi Split Plan Otomatis")
     default_matched = int(active_stock['Saat Ini']) if active_stock['Saat Ini'] > 0 else int(active_stock['Open'])
 
@@ -286,11 +282,9 @@ else:
         )
     with c_help:
         st.write("")
-        st.caption(f"Fraksi: **Rp {get_tick_size(entry_val)}/tick**\nZona Aman: **Rp {active_stock['Entry Rekomendasi']}**")
+        st.caption(f"Fraksi: **Rp {get_tick_size(entry_val)}/tick**\nZona: **Rp {active_stock['Entry Rekomendasi']}**")
 
     curr_tick = get_tick_size(entry_val)
-
-    # Parameter Eksekusi
     tp1 = entry_val + (2 * curr_tick)
     tp2 = entry_val + (4 * curr_tick)
     sl = entry_val - (3 * curr_tick)
@@ -306,24 +300,53 @@ else:
 
     st.markdown("---")
 
-    # TABEL TOP 3 TERPILIH (CLEAN VIEW)
-    st.write(f"### 📋 Top {len(df_focus)} Saham Paling Layak Pantau Pagi Ini")
-    display_cols = ["Saham", "Badge", "Open", "Saat Ini", "Entry Rekomendasi", "Potensi (%)", "Volume (Lot)"]
-    clean_table = df_focus[display_cols]
+    # ==================== FITUR EDIT / FILTER TABEL ====================
+    st.write(f"### 📋 Daftar Saham Paling Layak Pantau ({len(df_focus)} Emiten)")
+
+    with st.expander("⚙️ Edit Tampilan Tabel (Buang Saham / Pilih Kolom)", expanded=False):
+        c_del, c_col = st.columns(2)
+        with c_del:
+            # Dropdown buang saham yang tidak mau dilihat
+            all_visible_stocks = df_focus["Saham"].tolist()
+            stocks_to_hide = st.multiselect(
+                "Buang Saham dari Tabel:",
+                options=all_visible_stocks,
+                default=st.session_state.hidden_stocks,
+                help="Pilih saham yang mau dihilangkan (misal: BBCA)"
+            )
+            if stocks_to_hide != st.session_state.hidden_stocks:
+                st.session_state.hidden_stocks = stocks_to_hide
+                st.rerun()
+
+        with c_col:
+            # Checklist kolom yang mau dimunculkan
+            available_cols = ["Saham", "Badge", "Open", "Saat Ini", "Entry Rekomendasi", "Potensi (%)", "Volume (Lot)"]
+            selected_cols = st.multiselect(
+                "Pilih Kolom Tampil:",
+                options=available_cols,
+                default=["Saham", "Open", "Saat Ini", "Potensi (%)", "Volume (Lot)"]
+            )
+
+    # Tampilkan tabel yang sudah disaring
+    if not selected_cols:
+        selected_cols = ["Saham", "Saat Ini", "Potensi (%)"]
+
+    clean_table = df_focus[selected_cols]
 
     def highlight_clean(row):
-        val = row["Potensi (%)"]
-        if val >= 3.0:
-            return ['background-color: #f0fdf4; color: #14532d; font-weight: 500;'] * len(row)
-        else:
-            return ['background-color: #fafafa; color: #52525b;'] * len(row)
+        if "Potensi (%)" in row:
+            val = row["Potensi (%)"]
+            if val >= 3.0:
+                return ['background-color: #f0fdf4; color: #14532d; font-weight: 500;'] * len(row)
+        return ['background-color: #fafafa; color: #52525b;'] * len(row)
 
-    styled = clean_table.style.apply(highlight_clean, axis=1).format({
-        "Open": "Rp {:,.0f}",
-        "Saat Ini": "Rp {:,.0f}",
-        "Potensi (%)": "+{:.1f}%",
-        "Volume (Lot)": "{:,.0f}"
-    })
+    format_dict = {}
+    if "Open" in selected_cols: format_dict["Open"] = "Rp {:,.0f}"
+    if "Saat Ini" in selected_cols: format_dict["Saat Ini"] = "Rp {:,.0f}"
+    if "Potensi (%)" in selected_cols: format_dict["Potensi (%)"] = "+{:.1f}%"
+    if "Volume (Lot)" in selected_cols: format_dict["Volume (Lot)"] = "{:,.0f}"
+
+    styled = clean_table.style.apply(highlight_clean, axis=1).format(format_dict)
     st.dataframe(styled, use_container_width=True, hide_index=True)
 
 if auto_refresh:
