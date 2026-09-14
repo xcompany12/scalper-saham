@@ -10,7 +10,6 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Custom Styling
 st.markdown("""
 <style>
     .block-container { padding-top: 1rem; padding-bottom: 2rem; }
@@ -57,7 +56,7 @@ market_open = is_weekday and (9.0 <= hour_val <= 16.0)
 market_status_badge = "🟢 BURSA BUKA" if market_open else "🔴 BURSA TUTUP"
 
 st.title("⚡ ScalpTick Full IDX Radar")
-st.caption("Pindai Seluruh Emiten BEI (Termasuk Lapis 2 & 3 Non-Populer)")
+st.caption("Pusat Radar Saham IDX: Pantauan Harga Real-Time & Rencana Eksekusi")
 
 st.markdown(f"""
 <div class="time-banner">
@@ -65,7 +64,6 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# Dataset Komprehensif Seluruh Saham BEI per Abjad
 FULL_IDX_POOLS = {
     "Kelompok A - B (100+ Emiten)": [
         "AALI", "ABBA", "ABDA", "ABMM", "ACES", "ACST", "ADHI", "ADMF", "ADMR", "ADRO", 
@@ -175,7 +173,6 @@ def highlight_soft(row):
     else:
         return ['background-color: #fafafa; color: #a1a1aa;'] * len(row)
 
-# Selector Kelompok Abjad di Paling Atas
 c_sec, c_rf = st.columns([3, 1])
 with c_sec:
     selected_pool = st.selectbox("Pilih Kelompok Saham:", list(FULL_IDX_POOLS.keys()))
@@ -215,14 +212,15 @@ def fetch_full_data(tickers):
                 high_p = int(today['High'])
                 low_p = int(today['Low'])
                 last_p = int(today['Close'])
+                prev_close = int(prev_day['Close'])
                 prev_low = int(prev_day['Low'])
                 vol = int(today['Volume'])
-                data_date = today.name.strftime('%d/%m/%Y (Live)')
+                data_status = "Live"
             else:
                 prev_day = df_daily.iloc[-1]
+                prev_close = int(prev_day['Close'])
                 prev_low = int(prev_day['Low'])
                 
-                # Fetch 1m intraday jika candle harian hari ini belum terbentuk
                 t_obj = yf.Ticker(sym)
                 df_intra = t_obj.history(period="1d", interval="1m")
                 
@@ -232,7 +230,7 @@ def fetch_full_data(tickers):
                     low_p = int(df_intra['Low'].min())
                     last_p = int(df_intra.iloc[-1]['Close'])
                     vol = int(df_intra['Volume'].sum())
-                    data_date = df_intra.index[-1].strftime('%d/%m/%Y (Live)')
+                    data_status = "Live 1m"
                 else:
                     if len(df_daily) >= 2:
                         prev_day = df_daily.iloc[-2]
@@ -241,13 +239,13 @@ def fetch_full_data(tickers):
                         high_p = int(today['High'])
                         low_p = int(today['Low'])
                         last_p = int(today['Close'])
+                        prev_close = int(prev_day['Close'])
                         prev_low = int(prev_day['Low'])
                         vol = int(today['Volume'])
-                        data_date = today.name.strftime('%d/%m/%Y')
+                        data_status = "Close Kemarin"
                     else:
                         continue
 
-            # Hanya ambil saham yang ADA TRANSAKSI (Volume > 0 dan Open Valid)
             if vol <= 0 or open_p == 0:
                 continue
 
@@ -255,13 +253,14 @@ def fetch_full_data(tickers):
             rentang_tick = ((high_p - open_p) + (open_p - prev_low)) / tick
             potensi_pct = (rentang_tick * tick / open_p) * 100
 
+            # Level Eksekusi
             zona_beli = f"{open_p - tick} - {open_p}"
             target_tp1 = open_p + (3 * tick)
-            target_tp2 = open_p + (5 * tick)
             cut_loss = open_p - (2 * tick)
 
             gain_pct = ((target_tp1 - open_p) / open_p) * 100
             loss_pct = ((cut_loss - open_p) / open_p) * 100
+            change_day_pct = ((last_p - prev_close) / prev_close) * 100
 
             if potensi_pct >= 3.0 and rentang_tick >= 4.0:
                 badge = "🟢 Prioritas"
@@ -275,17 +274,17 @@ def fetch_full_data(tickers):
 
             results.append({
                 "Saham": t,
-                "Tanggal Data": data_date,
-                "Open": open_p,
-                "Close/Last": last_p,
-                "Badge": badge,
+                "Status": badge,
                 "ColorTag": color_tag,
+                "Data": data_status,
+                "Open": open_p,
+                "Saat Ini": last_p,
+                "Change %": round(change_day_pct, 2),
+                "Entry": zona_beli,
+                "TP (+3T)": target_tp1,
+                "Cut Loss": cut_loss,
                 "Potensi (%)": round(potensi_pct, 1),
                 "Ruang (Tick)": round(rentang_tick, 1),
-                "Zona Beli": zona_beli,
-                "Target TP": target_tp1,
-                "TP 2": target_tp2,
-                "Cut Loss": cut_loss,
                 "Gain %": round(gain_pct, 2),
                 "Loss %": round(loss_pct, 2),
                 "Volume (Lot)": vol // 100,
@@ -296,18 +295,17 @@ def fetch_full_data(tickers):
 
     res_df = pd.DataFrame(results)
     if not res_df.empty:
-        # Urutkan langsung berdasarkan potensi cuan paling lebar
         res_df = res_df.sort_values(by="Potensi (%)", ascending=False).reset_index(drop=True)
     return res_df
 
-with st.spinner(f"Memindai seluruh emiten aktif di {selected_pool}..."):
+with st.spinner(f"Memindai emiten aktif di {selected_pool}..."):
     df_data = fetch_full_data(tickers_to_scan)
 
 if df_data.empty:
     st.warning("Belum ada data transaksi aktif di kelompok ini.")
 else:
-    st.write("### 📌 Detail Kartu Eksekusi")
-    stock_options = [f"{r['Saham']} ({r['Badge']}) - Potensi: +{r['Potensi (%)']}%" for _, r in df_data.iterrows()]
+    st.write("### 📌 Detail Kartu Saham Terpilih")
+    stock_options = [f"{r['Saham']} ({r['Status']}) - Potensi: +{r['Potensi (%)']}%" for _, r in df_data.iterrows()]
     selected_option = st.selectbox("Sentuh untuk ganti saham:", options=stock_options, index=0)
     selected_code = selected_option.split(" ")[0]
     stock = df_data[df_data["Saham"] == selected_code].iloc[0]
@@ -316,37 +314,41 @@ else:
     <div class="card-box">
         <div style="display: flex; justify-content: space-between; align-items: center;">
             <h2 style="margin:0; color:#0f172a;">{stock['Saham']}</h2>
-            <span class="{stock['ColorTag']}">{stock['Badge']}</span>
+            <span class="{stock['ColorTag']}">{stock['Status']}</span>
         </div>
         <p style="margin:6px 0 0 0; color:#475569; font-size:0.88rem;">
-            Tanggal: <b>{stock['Tanggal Data']}</b> | Ruang: <b>+{stock['Potensi (%)']}%</b> ({stock['Ruang (Tick)']} Tick) | Vol: <b>{stock['Volume (Lot)']:,} Lot</b>
+            Status Data: <b>{stock['Data']}</b> | Volume: <b>{stock['Volume (Lot)']:,} Lot</b> | Fraksi: <b>Rp {stock['Tick Size']}/tick</b>
         </p>
     </div>
     """, unsafe_allow_html=True)
 
-    oc1, oc2 = st.columns(2)
-    oc1.metric("Harga Open", f"Rp {stock['Open']}")
-    oc2.metric("Harga Close / Last", f"Rp {stock['Close/Last']}")
+    # BARIS 1: FAKTA PASAR HARI INI
+    st.markdown("**1. Fakta Harga Pasar Saat Ini**")
+    f1, f2, f3 = st.columns(3)
+    f1.metric("Harga Open (Buka)", f"Rp {stock['Open']:,}")
+    f2.metric("Harga Saat Ini (Running)", f"Rp {stock['Saat Ini']:,}", delta=f"{stock['Change %']}%")
+    f3.metric("Potensi Rentang", f"+{stock['Potensi (%)']}%", delta=f"{stock['Ruang (Tick)']} Tick")
 
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Zona Beli", f"Rp {stock['Zona Beli']}")
-    c2.metric("Target TP (+3T)", f"Rp {stock['Target TP']}", delta=f"+{stock['Gain %']}%")
-    c3.metric("Cut Loss (-2T)", f"Rp {stock['Cut Loss']}", delta=f"{stock['Loss %']}%", delta_color="inverse")
-    st.caption(f"🎯 **TP 2 (+5 Tick):** Rp {stock['TP 2']} | **Fraksi:** Rp {stock['Tick Size']}/tick")
+    # BARIS 2: RENCANA EKSEKUSI
+    st.markdown("**2. Rencana Tindakan Order**")
+    e1, e2, e3 = st.columns(3)
+    e1.metric("Zona Entry (Beli)", f"Rp {stock['Entry']}")
+    e2.metric("Target TP (+3T)", f"Rp {stock['TP (+3T)']:,}", delta=f"+{stock['Gain %']}%")
+    e3.metric("Cut Loss (-2T)", f"Rp {stock['Cut Loss']:,}", delta=f"{stock['Loss %']}%", delta_color="inverse")
 
     st.divider()
 
-    st.write(f"### 📋 Ranking Emiten Aktif ({len(df_data)} Saham Bergerak)")
-    display_cols = ["Saham", "Badge", "Open", "Close/Last", "Zona Beli", "Target TP", "Cut Loss", "Potensi (%)", "Volume (Lot)"]
+    # TABEL LENGKAP
+    st.write(f"### 📋 Ringkasan Emiten Aktif ({len(df_data)} Saham)")
+    display_cols = ["Saham", "Status", "Open", "Saat Ini", "Entry", "TP (+3T)", "Cut Loss", "Potensi (%)"]
     tabel_ringkas = df_data[display_cols]
 
     styled_table = tabel_ringkas.style.apply(highlight_soft, axis=1)\
                                       .format({
                                           "Open": "Rp {:,.0f}",
-                                          "Close/Last": "Rp {:,.0f}", 
-                                          "Target TP": "Rp {:,.0f}", 
+                                          "Saat Ini": "Rp {:,.0f}", 
+                                          "TP (+3T)": "Rp {:,.0f}", 
                                           "Cut Loss": "Rp {:,.0f}", 
-                                          "Potensi (%)": "+{:.1f}%",
-                                          "Volume (Lot)": "{:,.0f}"
+                                          "Potensi (%)": "+{:.1f}%"
                                       })
     st.dataframe(styled_table, use_container_width=True, hide_index=True)
