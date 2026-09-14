@@ -3,6 +3,7 @@ import yfinance as yf
 import pandas as pd
 from datetime import datetime
 import pytz
+import time
 
 st.set_page_config(
     page_title="ScalpTick Pro Radar", 
@@ -42,26 +43,18 @@ st.markdown("""
         color: #334155;
         margin-bottom: 15px;
     }
-    .custom-chip {
-        background-color: #eff6ff;
-        color: #1d4ed8;
-        border: 1px solid #bfdbfe;
-        padding: 3px 8px;
-        border-radius: 6px;
-        font-size: 0.8rem;
-        font-weight: 600;
-        display: inline-block;
-        margin-right: 4px;
-        margin-bottom: 4px;
-    }
 </style>
 """, unsafe_allow_html=True)
 
-# Inisialisasi daftar saham dadakan di session state
+# Inisialisasi memori sesi agar saham fokus & input tidak hilang
 if "custom_stocks" not in st.session_state:
     st.session_state.custom_stocks = []
+if "locked_ticker" not in st.session_state:
+    st.session_state.locked_ticker = None
+if "last_refresh_time" not in st.session_state:
+    st.session_state.last_refresh_time = time.time()
 
-# Waktu Jakarta & Status Pasar
+# Waktu Jakarta & Status Bursa
 jkt_tz = pytz.timezone("Asia/Jakarta")
 now_jkt = datetime.now(jkt_tz)
 current_time_str = now_jkt.strftime("%d/%m/%Y | %H:%M:%S WIB")
@@ -72,15 +65,9 @@ market_open = is_weekday and (9.0 <= hour_val <= 16.0)
 market_status_badge = "🟢 BURSA BUKA" if market_open else "🔴 BURSA TUTUP"
 
 st.title("⚡ ScalpTick Pro Radar")
-st.caption("Auto-Scan Top Volume & Quick Action Scalping Engine (IDX)")
+st.caption("Live Radar & Kalkulator Eksekusi Anti-Reset (IDX)")
 
-st.markdown(f"""
-<div class="time-banner">
-    🕒 <b>Waktu Pindai:</b> {current_time_str} &nbsp;|&nbsp; <b>Status:</b> {market_status_badge}
-</div>
-""", unsafe_allow_html=True)
-
-# Pool Saham Inti Paling Likuid
+# Pool Saham Inti Likuid
 BASE_RADAR_POOL = [
     "BUMI", "BRMS", "DEWA", "ENRG", "DOID", "MEDC", "ELSA", "RAJA", "TOBA", "BULL",
     "GOTO", "WIFI", "INET", "STRK", "HUMI", "AYAM", "KIJA", "JKON", "WIKA", "PTPP",
@@ -110,45 +97,54 @@ def highlight_soft(row):
     else:
         return ['background-color: #fafafa; color: #a1a1aa;'] * len(row)
 
-# ==================== FITUR 1: INPUT SAHAM DADAKAN ====================
-with st.expander("⚡ Tambah Saham Dadakan Hari Ini (Running Trade)", expanded=False):
+# ==================== KONTROL AUTO-REFRESH ====================
+c_banner, c_toggle = st.columns([2, 1])
+with c_banner:
+    st.markdown(f"""
+    <div class="time-banner">
+        🕒 <b>Pindai:</b> {current_time_str} &nbsp;|&nbsp; <b>Status:</b> {market_status_badge}
+    </div>
+    """, unsafe_allow_html=True)
+with c_toggle:
+    auto_refresh = st.toggle("⚡ Auto-Sync (30s)", value=True, help="Update harga live otomatis tanpa ubah pilihan saham")
+
+# ==================== INPUT SAHAM DADAKAN ====================
+with st.expander("➕ Tambah Saham Dadakan (Running Trade)", expanded=False):
     col_in, col_add, col_rst = st.columns([3, 1, 1])
     with col_in:
-        new_ticker = st.text_input("Ketik Kode Saham BEI:", placeholder="Contoh: PUDP, TOSK, DAAZ").upper().strip()
+        new_ticker = st.text_input("Kode Saham BEI:", placeholder="Contoh: PUDP, TOSK, DAAZ").upper().strip()
     with col_add:
         st.write("")
         st.write("")
-        if st.button("➕ Tambah", use_container_width=True):
+        if st.button("Tambah", use_container_width=True):
             if new_ticker and len(new_ticker) == 4 and new_ticker not in st.session_state.custom_stocks:
                 st.session_state.custom_stocks.insert(0, new_ticker)
+                st.session_state.locked_ticker = new_ticker
                 st.cache_data.clear()
                 st.rerun()
     with col_rst:
         st.write("")
         st.write("")
-        if st.button("🗑️ Reset", use_container_width=True):
+        if st.button("Reset", use_container_width=True):
             st.session_state.custom_stocks = []
             st.cache_data.clear()
             st.rerun()
 
-    if st.session_state.custom_stocks:
-        st.caption("Saham tambahan aktif: " + ", ".join([f"`{s}`" for s in st.session_state.custom_stocks]))
-
-# Gabungkan saham dadakan di prioritas teratas
 ACTIVE_RADAR_POOL = list(dict.fromkeys(st.session_state.custom_stocks + BASE_RADAR_POOL))
 
-# Tombol Refresh & Sortir
+# Tombol Manual Refresh & Sortir
 col_btn, col_sort = st.columns([1, 2])
 with col_btn:
-    if st.button("🔄 Scan Pasar", use_container_width=True):
+    if st.button("🔄 Scan Manual", use_container_width=True):
         st.cache_data.clear()
+        st.rerun()
 with col_sort:
     sort_option = st.selectbox(
-        "Urutkan Daftar:",
+        "Urutkan:",
         ["🔥 Potensi Rentang Tertinggi", "📈 Volume Transaksi Terbanyak"]
     )
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=30)
 def fetch_top_active_data(tickers):
     results = []
     formatted = [f"{t}.JK" for t in tickers]
@@ -259,7 +255,7 @@ def fetch_top_active_data(tickers):
     res_df = pd.DataFrame(results)
     return res_df
 
-with st.spinner("Memindai radar saham aktif..."):
+with st.spinner("Memindai data..."):
     df_data = fetch_top_active_data(ACTIVE_RADAR_POOL)
 
 if df_data.empty:
@@ -271,11 +267,30 @@ else:
         df_data = df_data.sort_values(by="Potensi (%)", ascending=False).reset_index(drop=True)
 
     st.write("### 📌 Saham Pilihan Terpilih")
-    stock_options = [f"{r['Saham']} ({r['Status']}) | Vol: {r['Volume (Lot)']:,} Lot" for _, r in df_data.iterrows()]
-    selected_option = st.selectbox("Sentuh untuk ganti saham fokus:", options=stock_options, index=0)
-    selected_code = selected_option.split(" ")[0]
-    stock = df_data[df_data["Saham"] == selected_code].iloc[0]
+    stock_codes = df_data["Saham"].tolist()
 
+    # Kunci index pilihan saham agar tidak terpental saat data refresh
+    default_idx = 0
+    if st.session_state.locked_ticker in stock_codes:
+        default_idx = stock_codes.index(st.session_state.locked_ticker)
+
+    def on_stock_change():
+        st.session_state.locked_ticker = st.session_state.active_selector.split(" ")[0]
+
+    stock_options = [f"{r['Saham']} ({r['Status']}) | Vol: {r['Volume (Lot)']:,} Lot" for _, r in df_data.iterrows()]
+    selected_option = st.selectbox(
+        "Sentuh untuk ganti saham fokus:", 
+        options=stock_options, 
+        index=default_idx, 
+        key="active_selector", 
+        on_change=on_stock_change
+    )
+    
+    current_selected_code = selected_option.split(" ")[0]
+    st.session_state.locked_ticker = current_selected_code
+    stock = df_data[df_data["Saham"] == current_selected_code].iloc[0]
+
+    # Kartu Data Saham Terkunci
     st.markdown(f"""
     <div class="card-box">
         <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -283,19 +298,18 @@ else:
             <span class="{stock['ColorTag']}">{stock['Status']}</span>
         </div>
         <p style="margin:6px 0 0 0; color:#475569; font-size:0.88rem;">
-            Volume: <b>{stock['Volume (Lot)']:,} Lot</b> | Data: <b>{stock['Data']}</b> | Rentang: <b>+{stock['Potensi (%)']}%</b> ({stock['Ruang (Tick)']}T)
+            Volume: <b>{stock['Volume (Lot)']:,} Lot</b> | Status: <b>{stock['Data']}</b> | Rentang: <b>+{stock['Potensi (%)']}%</b> ({stock['Ruang (Tick)']}T)
         </p>
     </div>
     """, unsafe_allow_html=True)
 
-    # Fakta Pasar
     f1, f2 = st.columns(2)
     f1.metric("Harga Open", f"Rp {stock['Open']:,}")
     f2.metric("Harga Saat Ini", f"Rp {stock['Saat Ini']:,}", delta=f"{stock['Change %']}%")
 
-    # ==================== KALKULATOR EKSEKUSI DINAMIS ====================
+    # Kalkulator Eksekusi Real-Time
     st.markdown("#### 🧮 Live Execution Calculator")
-    st.caption("Sesuaikan harga matched dan batas toleransi cut loss:")
+    st.caption("Hitung target otomatis (fokus saham tetap terkunci):")
 
     default_entry = int(stock['Saat Ini']) if stock['Saat Ini'] > 0 else int(stock['Open'])
     
@@ -306,10 +320,17 @@ else:
             min_value=1, 
             max_value=100000, 
             value=default_entry, 
-            step=get_tick_size(default_entry)
+            step=get_tick_size(default_entry),
+            key=f"entry_{stock['Saham']}"
         )
     with col_sl_setting:
-        sl_ticks = st.selectbox("Toleransi SL:", [3, 4, 2], index=0, format_func=lambda x: f"-{x} Tick")
+        sl_ticks = st.selectbox(
+            "Toleransi SL:", 
+            [3, 4, 2], 
+            index=0, 
+            format_func=lambda x: f"-{x} Tick",
+            key=f"sl_{stock['Saham']}"
+        )
 
     custom_tick = get_tick_size(calc_entry)
     calc_tp1 = calc_entry + (3 * custom_tick)
@@ -319,8 +340,6 @@ else:
     calc_gain1 = ((calc_tp1 - calc_entry) / calc_entry) * 100
     calc_gain2 = ((calc_tp2 - calc_entry) / calc_entry) * 100
     calc_loss = ((calc_sl - calc_entry) / calc_entry) * 100
-
-    # Risk-Reward Ratio
     rr_ratio = abs(calc_gain1 / calc_loss) if calc_loss != 0 else 1.0
 
     c_tp, c_sl = st.columns(2)
@@ -346,3 +365,8 @@ else:
                                           "Volume (Lot)": "{:,.0f}"
                                       })
     st.dataframe(styled_table, use_container_width=True, hide_index=True)
+
+# Loop Otomatis 30 Detik Tanpa Mengganggu Interaksi User
+if auto_refresh:
+    time.sleep(30)
+    st.rerun()
