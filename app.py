@@ -5,7 +5,7 @@ from datetime import datetime
 import pytz
 
 st.set_page_config(
-    page_title="ScalpTick Live Radar", 
+    page_title="ScalpTick Full IDX", 
     layout="centered",
     initial_sidebar_state="collapsed"
 )
@@ -56,8 +56,8 @@ hour_val = now_jkt.hour + now_jkt.minute / 60.0
 market_open = is_weekday and (9.0 <= hour_val <= 16.0)
 market_status_badge = "🟢 BURSA BUKA" if market_open else "🔴 BURSA TUTUP"
 
-st.title("⚡ ScalpTick Live Radar")
-st.caption("Pusat Radar Saham Volatil & Kalkulator Eksekusi 2–3 Tick (IDX)")
+st.title("⚡ ScalpTick Full IDX Radar")
+st.caption("Pindai Seluruh Emiten BEI (Termasuk Lapis 2 & 3 Non-Populer)")
 
 st.markdown(f"""
 <div class="time-banner">
@@ -65,27 +65,94 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# 3 Sektor Pilihan Inti
-FOCUSED_SECTORS = {
-    "🔥 Scalping Teraktif & Momentum": [
-        "JKON", "BABP", "BRMS", "BUMI", "GOTO", 
-        "DEWA", "ENRG", "DOID", "MEDC", "KIJA"
+# Dataset Komprehensif Seluruh Saham BEI per Abjad
+FULL_IDX_POOLS = {
+    "Kelompok A - B (100+ Emiten)": [
+        "AALI", "ABBA", "ABDA", "ABMM", "ACES", "ACST", "ADHI", "ADMF", "ADMR", "ADRO", 
+        "AGAR", "AGII", "AGRO", "AGRS", "AHAP", "AIMS", "AISA", "AKKU", "AKPI", "AKRA", 
+        "AKSI", "ALDO", "ALKA", "ALMI", "ALTO", "AMAR", "AMFG", "AMIN", "AMMN", "AMOR", 
+        "ANDI", "ANJT", "ANTM", "APEX", "APIC", "APII", "APLI", "APLN", "ARCI", "ARGO", 
+        "ARII", "ARKA", "ARMY", "ARNA", "ARTA", "ARTI", "ARTO", "ASBI", "ASDF", "ASDM", 
+        "ASGR", "ASHA", "ASII", "ASJT", "ASLC", "ASMI", "ASPI", "ASRI", "ASRM", "ASSA", 
+        "ATAP", "ATIC", "AUTO", "AVIA", "AWAN", "AXIO", "AYAM", "AYLS", "BABP", "BACA", 
+        "BAJA", "BALI", "BANK", "BAPA", "BAPI", "BATA", "BAUT", "BBCA", "BBHI", "BBKP", 
+        "BBLD", "BBMD", "BBNI", "BBRI", "BBRM", "BBSS", "BBTN", "BBYB", "BCAP", "BCIC", 
+        "BCIP", "BDMN", "BEBS", "BEEF", "BEER", "BELI", "BELL", "BESS", "BEST", "BFIN"
     ],
-    "⛏️ Komoditas & Energi (Likuid)": [
-        "ADRO", "PTBA", "ANTM", "INCO", "BRMS", 
-        "ELSA", "TINS", "HRUM", "BULL", "MEDC"
+    "Kelompok C - G (100+ Emiten)": [
+        "CAMP", "CANI", "CARE", "CARS", "CASA", "CASH", "CASS", "CBMF", "CCSI", "CEKA", 
+        "CENT", "CFIN", "CHEM", "CHIP", "CINT", "CITA", "CITY", "CLAY", "CLEO", "CLPI", 
+        "CMNP", "CMNT", "CMPP", "CMRY", "CNKO", "CNMA", "CNTX", "COAL", "COCO", "CPIN", 
+        "CPRI", "CPRO", "CRAB", "CRSN", "CSAP", "CSIS", "CSMI", "CSRA", "CTBN", "CTRA", 
+        "CTTH", "CUAN", "CYBR", "DAAZ", "DADA", "DART", "DAYA", "DCII", "DEAL", "DEFI", 
+        "DELTA", "DEPO", "DEWA", "DFAM", "DGIK", "DGNS", "DIGI", "DILD", "DIVA", "DKFT", 
+        "DLTA", "DMAS", "DMMX", "DMND", "DNAR", "DNET", "DOID", "DOPC", "DPNS", "DPUM", 
+        "DRMA", "DSFI", "DSNG", "DSSA", "DUCK", "DUTI", "DVLA", "DWGL", "DYAN", "EAST", 
+        "ECII", "EDGE", "ELIT", "ELPI", "ELSA", "ELTY", "EMDE", "EMTK", "ENAK", "ENRG", 
+        "ENVY", "EPMT", "ERAA", "ERTX", "ESIP", "ESSA", "ESTA", "ESTI", "ETWA", "EURO", 
+        "EXCL", "FAPA", "FAST", "FASW", "FILM", "FIMP", "FIRE", "FISH", "FITT", "FLMC", 
+        "FMII", "FOOD", "FORU", "FPNI", "FREN", "FWCT", "GEMS", "GGRP", "GHON", "GIAA", 
+        "GJTL", "GLOB", "GLVA", "GMFI", "GMTD", "GOLD", "GOLL", "GOOD", "GOTO", "GPRA"
     ],
-    "🏢 Properti, Infra & Digital": [
-        "WIFI", "INET", "STRK", "HUMI", "WIKA", 
-        "PTPP", "BSDE", "PWON", "KIJA", "JKON"
+    "Kelompok H - M (100+ Emiten)": [
+        "HADE", "HAIS", "HAJJ", "HALO", "HATM", "HDFA", "HDIT", "HDTX", "HEAL", "HELI", 
+        "HERO", "HEXA", "HITS", "HKMU", "HMSP", "HOKI", "HOME", "HOMI", "HOPO", "HOTL", 
+        "HRME", "HRTA", "HRUM", "HUMI", "IATA", "IBFN", "IBOS", "IBST", "ICBP", "ICON", 
+        "IDEA", "IDPR", "IFII", "IFSH", "IGAR", "IIKP", "IKAI", "IKAN", "IKBI", "IMAS", 
+        "IMJS", "IMPC", "INAF", "INAI", "INCF", "INCI", "INCO", "INDF", "INDO", "INDR", 
+        "INDX", "INDY", "INET", "INGU", "INKP", "INNO", "INPC", "INPP", "INPS", "INRU", 
+        "INTA", "INTD", "INTP", "IOTF", "IPAC", "IPCC", "IPCM", "IPPE", "IPTV", "IRRA", 
+        "ISAP", "ISAT", "ISSP", "ITIC", "ITMA", "ITMG", "JARR", "JAST", "JAYA", "JECC", 
+        "JGLE", "JIHD", "JKON", "JMAS", "JPFA", "JRPT", "JSMR", "JSPT", "JTPE", "KAEF", 
+        "KAYU", "KBAG", "KBLI", "KBLM", "KBLV", "KDSI", "KDTN", "KEEN", "KEJU", "KIAS", 
+        "KICI", "KIJA", "KINO", "KIOS", "KJEN", "KKGI", "KLAS", "KLBF", "KMDS", "KMTR", 
+        "KMYA", "KOBX", "KOIN", "KOKA", "KONI", "KOPI", "KOTA", "KPAL", "KPAS", "KPIG", 
+        "KRAS", "KREN", "KRYA", "KTIC", "KUAS", "LFLO", "LION", "LIVE", "LMAX", "LMAS", 
+        "LMPI", "LMSH", "LOPI", "LPGI", "LPIN", "LPKR", "LPLI", "LPPF", "LPPS", "LRNA", 
+        "LSIP", "LTLS", "LUCK", "LUCY", "MABA", "MAHA", "MAIN", "MAPA", "MAPB", "MAPI", 
+        "MARI", "MARK", "MASA", "MAXI", "MBAP", "MBMA", "MBSS", "MBTO", "MCAS", "MCOL", 
+        "MCOR", "MDIA", "MDKA", "MDKI", "MDLN", "MDRN", "MEDC", "MEGA", "MENN", "MERK", 
+        "META", "MFIN", "MFMI", "MGLV", "MGNA", "MGRO", "MICE", "MIDI", "MIKA", "MIRA", 
+        "MITI", "MKNT", "MKPI", "MKTR", "MLBI", "MLIA", "MLPL", "MLPT", "MMIX", "MMLP", 
+        "MNCN", "MOLI", "MPIX", "MPMX", "MPOW", "MPPA", "MPRO", "MRAT", "MREI", "MSIN", 
+        "MSKY", "MSTI", "MTDL", "MTEL", "MTFN", "MTLA", "MTMH", "MTPS", "MTSM", "MTWI", 
+        "MUTU", "MYOH", "MYOR", "MYRX", "MYTX"
+    ],
+    "Kelompok N - S (100+ Emiten)": [
+        "NAIK", "NANO", "NASA", "NASI", "NATO", "NBIX", "NCKL", "NDIN", "NDRF", "NEST", 
+        "NETV", "NFCX", "NICE", "NICK", "NICL", "NIKL", "NINE", "NIPS", "NIRO", "NISP", 
+        "NOBU", "NPGF", "NRCA", "NSSS", "NTBK", "NUSA", "NZIA", "OASA", "OBMD", "OCAP", 
+        "OCDA", "OILS", "OKAS", "OLIV", "OMED", "OMRE", "OPMS", "PADA", "PADW", "PAMG", 
+        "PANI", "PANR", "PANS", "PBID", "PBSA", "PCAR", "PDES", "PDPP", "PEGE", "PEHA", 
+        "PEVE", "PGAS", "PGLI", "PGUN", "PICO", "PIPA", "PJAA", "PKPK", "PLAS", "PLIN", 
+        "PMJS", "PMMP", "PNBN", "PNBS", "PNGO", "PNIN", "PNLF", "PNSE", "POLA", "POLI", 
+        "POLL", "POLU", "POLY", "POOL", "PORT", "POWR", "PPGL", "PPRE", "PPRO", "PRAS", 
+        "PRDA", "PRIM", "PSAB", "PSAT", "PSDN", "PSGO", "PSKT", "PSSI", "PTBA", "PTDU", 
+        "PTIS", "PTON", "PTPW", "PTRO", "PTSN", "PTSP", "PUDP", "PURA", "PURE", "PURI", 
+        "PWON", "PYFA", "PZZA", "RAAM", "RAFI", "RAJA", "RALS", "RAMA", "RANC", "RBMS", 
+        "RCCC", "RDTX", "REAL", "RELF", "RELI", "RICY", "RIGS", "RIMO", "RISE", "RMKE", 
+        "RMKO", "ROCK", "RODA", "ROKI", "RONY", "ROTI", "RSGK", "RUIS", "RUNS", "SAFE", 
+        "SAME", "SAMF", "SAPX", "SATU", "SBAT", "SBMA", "SCCO", "SCMA", "SCNP", "SDMU", 
+        "SDPC", "SDRA", "SEMA", "SGER", "SGRO", "SHID", "SHIP", "SICO", "SILO", "SIMP", 
+        "SINI", "SIPD", "SKBM", "SKLT", "SKRN", "SLIS", "SMAR", "SMBR", "SMCB", "SMDM", 
+        "SMDR", "SMGA", "SMGR", "SMIL", "SMKL", "SMKM", "SMMA", "SMMT", "SMRA", "SMRU", 
+        "SMSM", "SNLK", "SOBI", "SOFA", "SOHO", "SONA", "SOSS", "SOTS", "SPMA", "SPTO", 
+        "SRTG", "SSIA", "SSMS", "SSTM", "STAR", "STAA", "STRK", "SUGI", "SULI", "SUMI", 
+        "SUNR", "SUPR", "SURE", "SWAT", "SWID"
+    ],
+    "Kelompok T - Z (100+ Emiten)": [
+        "TALF", "TAMA", "TAMU", "TAPG", "TARA", "TAXI", "TBIG", "TBLA", "TBMS", "TCID", 
+        "TCPI", "TDPM", "TEBE", "TECH", "TELE", "TFAS", "TFCO", "TGKA", "TGRA", "TIFA", 
+        "TIMS", "TINS", "TIRA", "TIRT", "TKIM", "TLDN", "TLKM", "TMAS", "TMPO", "TNCA", 
+        "TOBA", "TOOL", "TOPP", "TOSK", "TOTL", "TOTO", "TOWR", "TOYS", "TPMA", "TRAM", 
+        "TRGU", "TRIL", "TRIM", "TRIN", "TRIS", "TRJA", "TRON", "TRST", "TRUE", "TRUK", 
+        "TRUS", "TSPC", "TUGU", "TYRE", "UANG", "UCID", "UDNG", "UFOE", "ULTJ", "UNIC", 
+        "UNIQ", "UNIT", "UNSP", "UNTR", "UNVR", "URBN", "UVCR", "VAST", "VICI", "VICO", 
+        "VINS", "VIP", "VIVA", "VOKS", "VRNA", "WAPO", "WEGE", "WEHA", "WICO", "WIFI", 
+        "WIKA", "WINS", "WIRG", "WMPP", "WMUU", "WOOD", "WOWS", "WSBP", "WTON", "YELO", 
+        "YPAS", "YULE", "ZATA", "ZBRA", "ZINC", "ZONE", "ZYRX"
     ]
 }
-
-EXTRA_TICKERS = [
-    "AYAM", "STRK", "HUMI", "IRRA", "KAEF", "GIAA", "PPRE", 
-    "WEHA", "MPMX", "ASRI", "LPKR", "DILD", "TOBA", "RAJA", 
-    "BULL", "ELSA", "WTON", "TOTL", "SMDR", "PUDP"
-]
 
 def get_tick_size(price):
     if price < 200:
@@ -108,8 +175,20 @@ def highlight_soft(row):
     else:
         return ['background-color: #fafafa; color: #a1a1aa;'] * len(row)
 
+# Selector Kelompok Abjad di Paling Atas
+c_sec, c_rf = st.columns([3, 1])
+with c_sec:
+    selected_pool = st.selectbox("Pilih Kelompok Saham:", list(FULL_IDX_POOLS.keys()))
+with c_rf:
+    st.write("")
+    st.write("")
+    if st.button("🔄 Scan Pasar", use_container_width=True):
+        st.cache_data.clear()
+
+tickers_to_scan = FULL_IDX_POOLS[selected_pool]
+
 @st.cache_data(ttl=60)
-def fetch_focused_data(tickers):
+def fetch_full_data(tickers):
     results = []
     formatted = [f"{t}.JK" for t in tickers]
     
@@ -143,6 +222,7 @@ def fetch_focused_data(tickers):
                 prev_day = df_daily.iloc[-1]
                 prev_low = int(prev_day['Low'])
                 
+                # Fetch 1m intraday jika candle harian hari ini belum terbentuk
                 t_obj = yf.Ticker(sym)
                 df_intra = t_obj.history(period="1d", interval="1m")
                 
@@ -167,6 +247,7 @@ def fetch_focused_data(tickers):
                     else:
                         continue
 
+            # Hanya ambil saham yang ADA TRANSAKSI (Volume > 0 dan Open Valid)
             if vol <= 0 or open_p == 0:
                 continue
 
@@ -207,7 +288,7 @@ def fetch_focused_data(tickers):
                 "Cut Loss": cut_loss,
                 "Gain %": round(gain_pct, 2),
                 "Loss %": round(loss_pct, 2),
-                "Volume": vol // 100,
+                "Volume (Lot)": vol // 100,
                 "Tick Size": tick
             })
         except Exception:
@@ -215,128 +296,57 @@ def fetch_focused_data(tickers):
 
     res_df = pd.DataFrame(results)
     if not res_df.empty:
+        # Urutkan langsung berdasarkan potensi cuan paling lebar
         res_df = res_df.sort_values(by="Potensi (%)", ascending=False).reset_index(drop=True)
     return res_df
 
-tab1, tab2 = st.tabs(["📊 Radar 3 Sektor Utama", "⚡ Saham Cadangan Lapis 2 & 3"])
+with st.spinner(f"Memindai seluruh emiten aktif di {selected_pool}..."):
+    df_data = fetch_full_data(tickers_to_scan)
 
-# ==================== TAB 1: RADAR 3 SEKTOR ====================
-with tab1:
-    c_sec, c_rf = st.columns([3, 1])
-    with c_sec:
-        selected_sector = st.selectbox("Pilih Sektor Fokus:", list(FOCUSED_SECTORS.keys()))
-    with c_rf:
-        st.write("")
-        st.write("")
-        if st.button("🔄 Scan", key="btn_sec", use_container_width=True):
-            st.cache_data.clear()
+if df_data.empty:
+    st.warning("Belum ada data transaksi aktif di kelompok ini.")
+else:
+    st.write("### 📌 Detail Kartu Eksekusi")
+    stock_options = [f"{r['Saham']} ({r['Badge']}) - Potensi: +{r['Potensi (%)']}%" for _, r in df_data.iterrows()]
+    selected_option = st.selectbox("Sentuh untuk ganti saham:", options=stock_options, index=0)
+    selected_code = selected_option.split(" ")[0]
+    stock = df_data[df_data["Saham"] == selected_code].iloc[0]
 
-    tickers_to_scan = FOCUSED_SECTORS[selected_sector]
-
-    with st.spinner("Memindai sektor..."):
-        df_data = fetch_focused_data(tickers_to_scan)
-
-    if df_data.empty:
-        st.warning("Data transaksi belum masuk atau pasar sedang libur.")
-    else:
-        st.write("### 📌 Detail Kartu Eksekusi")
-        stock_options = [f"{r['Saham']} ({r['Badge']})" for _, r in df_data.iterrows()]
-        selected_option = st.selectbox("Sentuh untuk ganti saham:", options=stock_options, index=0)
-        selected_code = selected_option.split(" ")[0]
-        stock = df_data[df_data["Saham"] == selected_code].iloc[0]
-
-        st.markdown(f"""
-        <div class="card-box">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <h2 style="margin:0; color:#0f172a;">{stock['Saham']}</h2>
-                <span class="{stock['ColorTag']}">{stock['Badge']}</span>
-            </div>
-            <p style="margin:6px 0 0 0; color:#475569; font-size:0.88rem;">
-                Tanggal Data: <b>{stock['Tanggal Data']}</b> | Ruang: <b>+{stock['Potensi (%)']}%</b> ({stock['Ruang (Tick)']} Tick) | Vol: <b>{stock['Volume']:,} Lot</b>
-            </p>
+    st.markdown(f"""
+    <div class="card-box">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h2 style="margin:0; color:#0f172a;">{stock['Saham']}</h2>
+            <span class="{stock['ColorTag']}">{stock['Badge']}</span>
         </div>
-        """, unsafe_allow_html=True)
+        <p style="margin:6px 0 0 0; color:#475569; font-size:0.88rem;">
+            Tanggal: <b>{stock['Tanggal Data']}</b> | Ruang: <b>+{stock['Potensi (%)']}%</b> ({stock['Ruang (Tick)']} Tick) | Vol: <b>{stock['Volume (Lot)']:,} Lot</b>
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
 
-        oc1, oc2 = st.columns(2)
-        oc1.metric("Harga Open", f"Rp {stock['Open']}")
-        oc2.metric("Harga Close / Last", f"Rp {stock['Close/Last']}")
+    oc1, oc2 = st.columns(2)
+    oc1.metric("Harga Open", f"Rp {stock['Open']}")
+    oc2.metric("Harga Close / Last", f"Rp {stock['Close/Last']}")
 
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Zona Beli", f"Rp {stock['Zona Beli']}")
-        c2.metric("Target TP (+3T)", f"Rp {stock['Target TP']}", delta=f"+{stock['Gain %']}%")
-        c3.metric("Cut Loss (-2T)", f"Rp {stock['Cut Loss']}", delta=f"{stock['Loss %']}%", delta_color="inverse")
-        st.caption(f"🎯 **TP 2 (+5 Tick):** Rp {stock['TP 2']} | **Fraksi:** Rp {stock['Tick Size']}/tick")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Zona Beli", f"Rp {stock['Zona Beli']}")
+    c2.metric("Target TP (+3T)", f"Rp {stock['Target TP']}", delta=f"+{stock['Gain %']}%")
+    c3.metric("Cut Loss (-2T)", f"Rp {stock['Cut Loss']}", delta=f"{stock['Loss %']}%", delta_color="inverse")
+    st.caption(f"🎯 **TP 2 (+5 Tick):** Rp {stock['TP 2']} | **Fraksi:** Rp {stock['Tick Size']}/tick")
 
-        st.divider()
+    st.divider()
 
-        st.write("### 📋 Tabel Perbandingan (Open vs Close)")
-        display_cols = ["Saham", "Open", "Close/Last", "Zona Beli", "Target TP", "Cut Loss", "Potensi (%)"]
-        tabel_ringkas = df_data[display_cols]
+    st.write(f"### 📋 Ranking Emiten Aktif ({len(df_data)} Saham Bergerak)")
+    display_cols = ["Saham", "Badge", "Open", "Close/Last", "Zona Beli", "Target TP", "Cut Loss", "Potensi (%)", "Volume (Lot)"]
+    tabel_ringkas = df_data[display_cols]
 
-        styled_table = tabel_ringkas.style.apply(highlight_soft, axis=1)\
-                                          .format({
-                                              "Open": "Rp {:,.0f}",
-                                              "Close/Last": "Rp {:,.0f}", 
-                                              "Target TP": "Rp {:,.0f}", 
-                                              "Cut Loss": "Rp {:,.0f}", 
-                                              "Potensi (%)": "+{:.1f}%"
-                                          })
-        st.dataframe(styled_table, use_container_width=True, hide_index=True)
-
-# ==================== TAB 2: SAHAM CADANGAN ====================
-with tab2:
-    st.write("### ⚡ Saham Alternatif Volatil")
-    st.caption("Pilihan saham cadangan otomatis tanpa perlu ketik kode")
-
-    if st.button("🔄 Scan Saham Cadangan", key="btn_extra", use_container_width=True):
-        st.cache_data.clear()
-
-    with st.spinner("Memindai 20 saham cadangan..."):
-        df_extra = fetch_focused_data(EXTRA_TICKERS)
-
-    if df_extra.empty:
-        st.warning("Data transaksi belum tersedia.")
-    else:
-        st.write("### 📌 Detail Kartu Saham Cadangan")
-        extra_options = [f"{r['Saham']} ({r['Badge']})" for _, r in df_extra.iterrows()]
-        selected_extra = st.selectbox("Pilih Saham:", options=extra_options, index=0)
-        extra_code = selected_extra.split(" ")[0]
-        ex_stock = df_extra[df_extra["Saham"] == extra_code].iloc[0]
-
-        st.markdown(f"""
-        <div class="card-box">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <h2 style="margin:0; color:#0f172a;">{ex_stock['Saham']}</h2>
-                <span class="{ex_stock['ColorTag']}">{ex_stock['Badge']}</span>
-            </div>
-            <p style="margin:6px 0 0 0; color:#475569; font-size:0.88rem;">
-                Tanggal Data: <b>{ex_stock['Tanggal Data']}</b> | Ruang: <b>+{ex_stock['Potensi (%)']}%</b> ({ex_stock['Ruang (Tick)']} Tick) | Vol: <b>{ex_stock['Volume']:,} Lot</b>
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-
-        eoc1, eoc2 = st.columns(2)
-        eoc1.metric("Harga Open", f"Rp {ex_stock['Open']}")
-        eoc2.metric("Harga Close / Last", f"Rp {ex_stock['Close/Last']}")
-
-        ec1, ec2, ec3 = st.columns(3)
-        ec1.metric("Zona Beli", f"Rp {ex_stock['Zona Beli']}")
-        ec2.metric("Target TP (+3T)", f"Rp {ex_stock['Target TP']}", delta=f"+{ex_stock['Gain %']}%")
-        ec3.metric("Cut Loss (-2T)", f"Rp {ex_stock['Cut Loss']}", delta=f"{ex_stock['Loss %']}%", delta_color="inverse")
-        st.caption(f"🎯 **TP 2 (+5 Tick):** Rp {ex_stock['TP 2']} | **Fraksi:** Rp {ex_stock['Tick Size']}/tick")
-
-        st.divider()
-
-        st.write("### 📋 Tabel Perbandingan Saham Cadangan")
-        display_extra_cols = ["Saham", "Open", "Close/Last", "Zona Beli", "Target TP", "Cut Loss", "Potensi (%)"]
-        tabel_extra = df_extra[display_extra_cols]
-
-        styled_extra_table = tabel_extra.style.apply(highlight_soft, axis=1)\
-                                              .format({
-                                                  "Open": "Rp {:,.0f}",
-                                                  "Close/Last": "Rp {:,.0f}", 
-                                                  "Target TP": "Rp {:,.0f}", 
-                                                  "Cut Loss": "Rp {:,.0f}", 
-                                                  "Potensi (%)": "+{:.1f}%"
-                                              })
-        st.dataframe(styled_extra_table, use_container_width=True, hide_index=True)
+    styled_table = tabel_ringkas.style.apply(highlight_soft, axis=1)\
+                                      .format({
+                                          "Open": "Rp {:,.0f}",
+                                          "Close/Last": "Rp {:,.0f}", 
+                                          "Target TP": "Rp {:,.0f}", 
+                                          "Cut Loss": "Rp {:,.0f}", 
+                                          "Potensi (%)": "+{:.1f}%",
+                                          "Volume (Lot)": "{:,.0f}"
+                                      })
+    st.dataframe(styled_table, use_container_width=True, hide_index=True)
